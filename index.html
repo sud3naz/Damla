@@ -33,8 +33,8 @@
   <div class="wrap">
     <section class="hero">
       <div>
-        <h1>Buy XLM every week.<br><span class="accent">Sign only once.</span></h1>
-        <p class="sub">Non-custodial recurring purchases on Stellar. Your funds stay in your wallet; the protocol enforces the schedule. Drop by drop.</p>
+        <h1>Buy XLM on your schedule.<br><span class="accent">Sign only once.</span></h1>
+        <p class="sub">Non-custodial recurring purchases on Stellar, daily, weekly or monthly. Your funds stay in your wallet; the protocol enforces the schedule. Drop by drop.</p>
         <ul class="points">
           <li><b>Non-custodial.</b>&nbsp;USDC never leaves your wallet until each swap settles.</li>
           <li><b>No smart contract.</b>&nbsp;Nothing to deploy, nothing to audit, nothing to exploit.</li>
@@ -44,17 +44,24 @@
       </div>
 
       <div class="card">
-        <label>Weekly amount</label>
+        <label>Amount per purchase</label>
         <div class="amount-row">
           <input id="amount" type="number" min="1" value="25">
           <span class="unit">USDC</span>
         </div>
 
-        <label>Duration</label>
-        <div class="opts" id="weeks">
-          <div class="opt on" data-w="4">4 weeks</div>
-          <div class="opt" data-w="8">8 weeks</div>
-          <div class="opt" data-w="12">12 weeks</div>
+        <label>Frequency</label>
+        <div class="opts" id="freq">
+          <div class="opt" data-f="daily">Daily</div>
+          <div class="opt on" data-f="weekly">Weekly</div>
+          <div class="opt" data-f="monthly">Monthly</div>
+        </div>
+
+        <label>Number of purchases</label>
+        <div class="opts" id="count">
+          <div class="opt on" data-c="4">4</div>
+          <div class="opt" data-c="8">8</div>
+          <div class="opt" data-c="12">12</div>
         </div>
 
         <label>Max slippage</label>
@@ -66,7 +73,7 @@
 
         <div class="summary">
           <div class="row"><span>Total to commit</span><b id="total">100 USDC</b></div>
-          <div class="row"><span>Executes</span><b>every 7 days, on-chain</b></div>
+          <div class="row"><span>Executes</span><b id="cadence">every week, on-chain</b></div>
           <div class="row"><span>Custody</span><b>your wallet, always</b></div>
         </div>
 
@@ -78,9 +85,9 @@
     <section class="how">
       <h2>How it works</h2>
       <div class="steps">
-        <div class="step"><div class="n">1</div><p><b>Sign once.</b> You pre-sign one transaction per week — amount, asset and destination are locked inside each signature.</p></div>
-        <div class="step"><div class="n">2</div><p><b>The protocol keeps time.</b> Each transaction is invalid until its week arrives (Stellar's <code>minSeqAge</code>). Nobody can run it early — not even us.</p></div>
-        <div class="step"><div class="n">3</div><p><b>XLM lands in your wallet.</b> Every week a path payment swaps your USDC to XLM on Stellar's DEX. Miss a week? The chain continues.</p></div>
+        <div class="step"><div class="n">1</div><p><b>Sign once.</b> You pre-sign one transaction per purchase — amount, asset and destination are locked inside each signature.</p></div>
+        <div class="step"><div class="n">2</div><p><b>The protocol keeps time.</b> Each transaction is invalid until its date arrives (Stellar's <code>minSeqAge</code>). Nobody can run it early — not even us.</p></div>
+        <div class="step"><div class="n">3</div><p><b>XLM lands in your wallet.</b> On every scheduled date a path payment swaps your USDC to XLM on Stellar's DEX. Miss one? The chain continues.</p></div>
       </div>
     </section>
   </div>
@@ -95,11 +102,14 @@
 
 <script src="script.js"></script>
 <script>
-  let weeks = 4;
+  let count = 4;
+  let freq = 'weekly';
+  const CADENCE = { daily: 'every day, on-chain', weekly: 'every week, on-chain', monthly: 'every month, on-chain' };
 
   function refresh() {
     const amt = Number(document.getElementById('amount').value) || 0;
-    document.getElementById('total').textContent = (amt * weeks).toLocaleString('en-US') + ' USDC';
+    document.getElementById('total').textContent = (amt * count).toLocaleString('en-US') + ' USDC';
+    document.getElementById('cadence').textContent = CADENCE[freq];
   }
 
   function bindOpts(id, cb) {
@@ -113,7 +123,8 @@
     });
   }
 
-  bindOpts('weeks', el => { weeks = Number(el.dataset.w); refresh(); });
+  bindOpts('freq', el => { freq = el.dataset.f; refresh(); });
+  bindOpts('count', el => { count = Number(el.dataset.c); refresh(); });
   bindOpts('slip', () => {});
   document.getElementById('amount').addEventListener('input', refresh);
   refresh();
