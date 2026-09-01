@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAQ — Damla</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="index.html">
+    <svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#4db8ff"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#c8ecff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+    Damla
+  </a>
+  <nav>
+    <a href="index.html">App</a>
+    <a href="docs.html">Docs</a>
+    <a href="faq.html" class="here">FAQ</a>
+    <span class="net">Mainnet</span>
+  </nav>
+</header>
+
+<main class="doc">
+  <h1>FAQ</h1>
+
+  <div class="faq-item">
+    <h2>Do you hold my money?</h2>
+    <p>No. Your USDC sits in your own wallet until the moment each weekly swap settles on Stellar's DEX. There is no deposit, no vault, no contract balance. The XLM you buy lands directly in the same wallet.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>What exactly am I signing?</h2>
+    <p>One transaction per week of your plan, each containing a single swap: a fixed USDC amount to XLM with a minimum-received floor. The amount, asset, destination and floor are locked inside each signature and cannot be changed by anyone afterwards — including us.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>Can Damla run my purchases early, or drain my account?</h2>
+    <p>No. Each transaction is invalid until its week arrives — that's enforced by every Stellar validator, not by our code. And each signature covers exactly one pre-defined swap, so nothing else in your account can be touched. The worst a malicious or broken service can do is not submit, in which case nothing happens.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>How do I cancel?</h2>
+    <p>Move or spend your USDC. Future purchases simply fail for lack of funds, with no penalty. There is nothing to withdraw because nothing was ever deposited.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>What if the price spikes during one of my weeks?</h2>
+    <p>Every swap has a minimum-received floor derived from the price at signing plus the tolerance you chose (1–5%). If the market moves outside your band that week, the purchase is skipped instead of filled badly, and your plan continues the next week.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>What happens if a week is missed?</h2>
+    <p>The chain is built to survive gaps: each week's transaction stays valid across a window, so a skipped week doesn't break the ones after it.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>What are the fees?</h2>
+    <p>Stellar network fees are fractions of a cent and are paid by the service's channel account, not you. The swap itself executes at DEX market price within your slippage floor.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>Which wallets are supported?</h2>
+    <p>Freighter, with a regular Stellar account (G-address). No special account type or contract deployment is needed.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>Is there a smart contract? Has it been audited?</h2>
+    <p>There is no smart contract, which is the point: there is no contract code to audit or exploit. The schedule and the limits are enforced by Stellar protocol rules (<code>minSeqAge</code>, <code>minSeqNum</code>, signed transaction hashes).</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>Is this on mainnet?</h2>
+    <p>Damla targets Stellar mainnet. Plan signing is being rolled out; the plan builder is live now.</p>
+  </div>
+</main>
+
+<footer>
+  <span>No smart contract. Nothing to audit.</span>
+  <a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a>
+</footer>
+</body>
+</html>
