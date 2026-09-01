@@ -28,52 +28,98 @@
   </div>
 </header>
 
-<main><div class="doc">
-  <h1>Documentation</h1>
+<main>
+  <div class="wrap docgrid">
+    <aside class="toc">
+      <div class="toc-title">On this page</div>
+      <a href="#what">What is Damla?</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#security">Security model</a>
+      <a href="#cancel">Cancelling a plan</a>
+      <a href="#slippage">Slippage</a>
+      <a href="#roadmap">Roadmap</a>
+    </aside>
 
-  <h2>What is Damla?</h2>
-  <p>Damla is dollar-cost averaging (DCA) for Stellar: you commit to buying a fixed amount of XLM with USDC every week, sign once, and the purchases execute automatically on Stellar's built-in DEX. It is <b>non-custodial</b> — your USDC stays in your own wallet until the moment each swap settles — and it uses <b>no smart contract</b>.</p>
+    <div class="docbody">
+      <h1>Documentation</h1>
+      <p class="lead">Everything Damla does, and everything it deliberately doesn't.</p>
 
-  <div class="note"><i>Damla</i> is Turkish for "drop", from the proverb <i>damlaya damlaya göl olur</i>: drop by drop, a lake is formed. That is the whole product.</div>
+      <section id="what">
+        <h2>What is Damla?</h2>
+        <p>Damla is dollar-cost averaging (DCA) for Stellar: you commit to buying a fixed amount of XLM with USDC every week, sign once, and the purchases execute automatically on Stellar's built-in DEX. It is <b>non-custodial</b> — your USDC stays in your own wallet until the moment each swap settles — and it uses <b>no smart contract</b>.</p>
+        <div class="note"><i>Damla</i> is Turkish for "drop", from the proverb <i>damlaya damlaya göl olur</i>: drop by drop, a lake is formed. That is the whole product.</div>
+      </section>
 
-  <h2>Architecture</h2>
-  <p>Damla is built on <b>pre-signed transaction chains</b> using classic Stellar features. No Soroban, no contract accounts — it works today with Freighter and a regular G-address.</p>
+      <section id="architecture">
+        <h2>Architecture</h2>
+        <p>Damla is built on <b>pre-signed transaction chains</b> using classic Stellar features. No Soroban, no contract accounts — it works today with Freighter and a regular G-address.</p>
 
-  <h3>1. One transaction per week, signed up front</h3>
-  <p>When you create a plan, Damla builds one Stellar transaction for each week. Every transaction contains a single <code>PathPaymentStrictSend</code> operation: send a fixed amount of your USDC, receive XLM, with a <code>destMin</code> floor protecting you from bad fills. You sign all of them in one sitting. The amount, asset, destination, and floor are inside each signed hash and can never be altered afterwards.</p>
+        <div class="arch-step">
+          <div class="n">1</div>
+          <div>
+            <h3>One transaction per week, signed up front</h3>
+            <p>When you create a plan, Damla builds one Stellar transaction for each week. Every transaction contains a single <code>PathPaymentStrictSend</code> operation: send a fixed amount of your USDC, receive XLM, with a <code>destMin</code> floor protecting you from bad fills. You sign all of them in one sitting. The amount, asset, destination, and floor are inside each signed hash and can never be altered afterwards.</p>
+          </div>
+        </div>
 
-  <h3>2. The protocol keeps time, not our server</h3>
-  <p>Each transaction carries a <code>minSeqAge</code> precondition: it is <b>invalid by consensus</b> until enough time has passed since the source account's sequence number last changed. Submitting early is not "against the rules" — it is simply rejected by every validator on the network. The weekly cadence is enforced by Stellar itself.</p>
+        <div class="arch-step">
+          <div class="n">2</div>
+          <div>
+            <h3>The protocol keeps time, not our server</h3>
+            <p>Each transaction carries a <code>minSeqAge</code> precondition: it is <b>invalid by consensus</b> until enough time has passed since the source account's sequence number last changed. Submitting early is not "against the rules" — it is simply rejected by every validator on the network. The weekly cadence is enforced by Stellar itself.</p>
+          </div>
+        </div>
 
-  <h3>3. Channel account</h3>
-  <p>The transaction's <i>source</i> is a dedicated channel account owned by the service, while the <i>operation's</i> source is you. This matters because <code>minSeqAge</code> measures the source account's sequence age: if your own account were the source, any unrelated transaction you make would reset the clock and delay your purchase. The channel account does nothing else, so its clock stays clean. It also pays the (sub-cent) network fees and never holds user funds.</p>
+        <div class="arch-step">
+          <div class="n">3</div>
+          <div>
+            <h3>Channel account</h3>
+            <p>The transaction's <i>source</i> is a dedicated channel account owned by the service, while the <i>operation's</i> source is you. This matters because <code>minSeqAge</code> measures the source account's sequence age: if your own account were the source, any unrelated transaction you make would reset the clock and delay your purchase. The channel account does nothing else, so its clock stays clean. It also pays the (sub-cent) network fees and never holds user funds.</p>
+          </div>
+        </div>
 
-  <h3>4. Skipped weeks don't break the chain</h3>
-  <p>Transactions carry <code>minSeqNum</code> ranges, so each week's transaction is valid across a window of sequence numbers rather than a single point. If a week is missed, the next one still works; executing any transaction automatically invalidates the earlier ones. A swap that fails at the operation level (for example, the <code>destMin</code> floor not met) consumes its slot and the chain continues.</p>
+        <div class="arch-step">
+          <div class="n">4</div>
+          <div>
+            <h3>Skipped weeks don't break the chain</h3>
+            <p>Transactions carry <code>minSeqNum</code> ranges, so each week's transaction is valid across a window of sequence numbers rather than a single point. If a week is missed, the next one still works; executing any transaction automatically invalidates the earlier ones. A swap that fails at the operation level (for example, the <code>destMin</code> floor not met) consumes its slot and the chain continues.</p>
+          </div>
+        </div>
+      </section>
 
-  <h2>Security model</h2>
-  <p>There is no contract to audit because there is no contract. The trust assumptions reduce to Stellar's own protocol rules. Even a <b>fully compromised</b> trigger service:</p>
-  <ul>
-    <li>cannot submit a purchase early — <code>minSeqAge</code> and time bounds are checked by consensus;</li>
-    <li>cannot change the amount, asset, destination, or slippage floor — they are inside your signed hash;</li>
-    <li>cannot touch anything else in your account — the signature covers exactly one operation;</li>
-    <li>can at worst <i>fail to submit</i> — in which case no purchase happens and no funds move.</li>
-  </ul>
-  <p>The only residual risk is timing within the allowed weekly window, and your own <code>destMin</code> bounds how bad that timing can be.</p>
+      <section id="security">
+        <h2>Security model</h2>
+        <p>There is no contract to audit because there is no contract. The trust assumptions reduce to Stellar's own protocol rules. Even a <b>fully compromised</b> trigger service:</p>
+        <ul class="sec-list">
+          <li>cannot submit a purchase early — <code>minSeqAge</code> and time bounds are checked by consensus</li>
+          <li>cannot change the amount, asset, destination, or slippage floor — they are inside your signed hash</li>
+          <li>cannot touch anything else in your account — the signature covers exactly one operation</li>
+          <li class="worst">can at worst <i>fail to submit</i> — no purchase happens, no funds move</li>
+        </ul>
+        <p style="margin-top:12px">The only residual risk is timing within the allowed weekly window, and your own <code>destMin</code> bounds how bad that timing can be.</p>
+      </section>
 
-  <h2>Cancelling a plan</h2>
-  <p>Your USDC never leaves your wallet in advance, so cancelling is trivial: move or spend the USDC, and future purchases simply fail for lack of funds. No permission needed, no lockup, nothing to withdraw.</p>
+      <section id="cancel">
+        <h2>Cancelling a plan</h2>
+        <p>Your USDC never leaves your wallet in advance, so cancelling is trivial: move or spend the USDC, and future purchases simply fail for lack of funds. No permission needed, no lockup, nothing to withdraw.</p>
+      </section>
 
-  <h2>Slippage (<code>destMin</code>)</h2>
-  <p>Because transactions are signed weeks in advance, the slippage floor is fixed at signing time. Damla derives it from the market price when you sign, widened by the tolerance you pick (1–5%). A week whose price falls outside your band is skipped rather than filled badly, and the chain continues the following week.</p>
+      <section id="slippage">
+        <h2>Slippage (<code>destMin</code>)</h2>
+        <p>Because transactions are signed weeks in advance, the slippage floor is fixed at signing time. Damla derives it from the market price when you sign, widened by the tolerance you pick (1–5%). A week whose price falls outside your band is skipped rather than filled badly, and the chain continues the following week.</p>
+      </section>
 
-  <h2>Roadmap</h2>
-  <ol>
-    <li><b>Now:</b> plan builder frontend, Freighter connection.</li>
-    <li><b>Next:</b> plan signing + trigger service, first live plans on mainnet.</li>
-    <li><b>Later:</b> live pricing from Horizon, skipped-week rollover, monthly re-sign option, more pairs.</li>
-  </ol>
-</div></main>
+      <section id="roadmap">
+        <h2>Roadmap</h2>
+        <ul class="timeline">
+          <li class="now"><b>Now</b>Plan builder frontend, Freighter connection.</li>
+          <li><b>Next</b>Plan signing + trigger service, first live plans on mainnet.</li>
+          <li><b>Later</b>Live pricing from Horizon, skipped-week rollover, monthly re-sign option, more pairs.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</main>
 
 <footer>
   <div class="wrap footer-in">
