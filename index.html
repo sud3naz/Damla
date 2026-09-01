@@ -8,66 +8,88 @@
 </head>
 <body>
 <header>
-  <a class="brand" href="index.html">
-    <svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#4db8ff"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#c8ecff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
-    Damla
-  </a>
-  <nav>
-    <a href="index.html" class="here">App</a>
-    <a href="docs.html">Docs</a>
-    <a href="faq.html">FAQ</a>
-    <span class="net">Mainnet</span>
-  </nav>
+  <div class="wrap header-in">
+    <a class="brand" href="index.html">
+      <svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#4db8ff"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#c8ecff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+      Damla
+    </a>
+    <nav>
+      <a href="index.html" class="here">App</a>
+      <a href="docs.html">Docs</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+    <div class="hdr-right">
+      <button class="net" id="net-toggle">Mainnet</button>
+      <button class="wallet-btn" id="wallet-connect">Connect Wallet</button>
+    </div>
+  </div>
 </header>
 
 <main>
-  <h1>Buy XLM every week.<br>Sign only once.</h1>
-  <p class="sub">Non-custodial recurring purchases on Stellar. Your funds stay in your wallet; the protocol enforces the schedule. Drop by drop.</p>
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <h1>Buy XLM every week.<br><span class="accent">Sign only once.</span></h1>
+        <p class="sub">Non-custodial recurring purchases on Stellar. Your funds stay in your wallet; the protocol enforces the schedule. Drop by drop.</p>
+        <ul class="points">
+          <li><b>Non-custodial.</b>&nbsp;USDC never leaves your wallet until each swap settles.</li>
+          <li><b>No smart contract.</b>&nbsp;Nothing to deploy, nothing to audit, nothing to exploit.</li>
+          <li><b>Protocol-enforced timing.</b>&nbsp;Purchases can't run early — Stellar validators reject them.</li>
+          <li><b>Cancel anytime.</b>&nbsp;Move your USDC and the plan simply stops.</li>
+        </ul>
+      </div>
 
-  <div class="card">
-    <label>Weekly amount</label>
-    <div class="amount-row">
-      <input id="amount" type="number" min="1" value="25">
-      <span class="unit">USDC</span>
-    </div>
+      <div class="card">
+        <label>Weekly amount</label>
+        <div class="amount-row">
+          <input id="amount" type="number" min="1" value="25">
+          <span class="unit">USDC</span>
+        </div>
 
-    <label>Duration</label>
-    <div class="opts" id="weeks">
-      <div class="opt on" data-w="4">4 weeks</div>
-      <div class="opt" data-w="8">8 weeks</div>
-      <div class="opt" data-w="12">12 weeks</div>
-    </div>
+        <label>Duration</label>
+        <div class="opts" id="weeks">
+          <div class="opt on" data-w="4">4 weeks</div>
+          <div class="opt" data-w="8">8 weeks</div>
+          <div class="opt" data-w="12">12 weeks</div>
+        </div>
 
-    <label>Max slippage</label>
-    <div class="opts" id="slip">
-      <div class="opt" data-s="1">1%</div>
-      <div class="opt on" data-s="3">3%</div>
-      <div class="opt" data-s="5">5%</div>
-    </div>
+        <label>Max slippage</label>
+        <div class="opts" id="slip">
+          <div class="opt" data-s="1">1%</div>
+          <div class="opt on" data-s="3">3%</div>
+          <div class="opt" data-s="5">5%</div>
+        </div>
 
-    <div class="summary">
-      <div class="row"><span>Total to commit</span><b id="total">100 USDC</b></div>
-      <div class="row"><span>Executes</span><b>every 7 days, on-chain</b></div>
-      <div class="row"><span>Custody</span><b>your wallet, always</b></div>
-    </div>
+        <div class="summary">
+          <div class="row"><span>Total to commit</span><b id="total">100 USDC</b></div>
+          <div class="row"><span>Executes</span><b>every 7 days, on-chain</b></div>
+          <div class="row"><span>Custody</span><b>your wallet, always</b></div>
+        </div>
 
-    <button class="cta" id="connect">Connect Freighter</button>
-    <div class="wallet" id="wallet"></div>
-  </div>
+        <button class="cta" id="sign">Sign plan</button>
+        <div class="wallet" id="wallet-note"></div>
+      </div>
+    </section>
 
-  <div class="how">
-    <h2>How it works</h2>
-    <div class="step"><div class="n">1</div><p><b>Sign once.</b> You pre-sign one transaction per week — amount, asset and destination are locked inside each signature.</p></div>
-    <div class="step"><div class="n">2</div><p><b>The protocol keeps time.</b> Each transaction is invalid until its week arrives (Stellar's <code>minSeqAge</code>). Nobody can run it early — not even us.</p></div>
-    <div class="step"><div class="n">3</div><p><b>XLM lands in your wallet.</b> Every week a path payment swaps your USDC to XLM on Stellar's DEX. Miss a week? The chain continues.</p></div>
+    <section class="how">
+      <h2>How it works</h2>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><p><b>Sign once.</b> You pre-sign one transaction per week — amount, asset and destination are locked inside each signature.</p></div>
+        <div class="step"><div class="n">2</div><p><b>The protocol keeps time.</b> Each transaction is invalid until its week arrives (Stellar's <code>minSeqAge</code>). Nobody can run it early — not even us.</p></div>
+        <div class="step"><div class="n">3</div><p><b>XLM lands in your wallet.</b> Every week a path payment swaps your USDC to XLM on Stellar's DEX. Miss a week? The chain continues.</p></div>
+      </div>
+    </section>
   </div>
 </main>
 
 <footer>
-  <span>No smart contract. Nothing to audit.</span>
-  <a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a>
+  <div class="wrap footer-in">
+    <span>No smart contract. Nothing to audit.</span>
+    <a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a>
+  </div>
 </footer>
 
+<script src="script.js"></script>
 <script>
   let weeks = 4;
 
@@ -92,29 +114,18 @@
   document.getElementById('amount').addEventListener('input', refresh);
   refresh();
 
-  const btn = document.getElementById('connect');
-  const walletEl = document.getElementById('wallet');
+  const signBtn = document.getElementById('sign');
+  const note = document.getElementById('wallet-note');
 
-  btn.addEventListener('click', async () => {
-    if (btn.dataset.connected) {
-      walletEl.textContent = 'Plan signing goes live soon.';
+  signBtn.addEventListener('click', () => {
+    if (!window.damlaWallet.address) {
+      note.textContent = 'Connect your wallet first (top right).';
       return;
     }
-    if (!window.freighterApi) {
-      walletEl.innerHTML = 'Freighter not found. <a href="https://freighter.app" target="_blank" rel="noopener" style="color:var(--drop)">Install it</a> to continue.';
-      return;
-    }
-    try {
-      const access = await window.freighterApi.requestAccess();
-      const addr = typeof access === 'string' ? access : access.address;
-      if (!addr) throw new Error('no address');
-      btn.dataset.connected = '1';
-      btn.textContent = 'Sign plan';
-      walletEl.innerHTML = 'Connected: <span class="addr">' + addr.slice(0, 5) + '…' + addr.slice(-5) + '</span>';
-    } catch (e) {
-      walletEl.textContent = 'Connection declined.';
-    }
+    note.textContent = 'Plan signing goes live soon.';
   });
+
+  document.addEventListener('damla:connected', () => { note.textContent = ''; });
 </script>
 </body>
 </html>

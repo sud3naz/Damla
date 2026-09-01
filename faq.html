@@ -8,19 +8,24 @@
 </head>
 <body>
 <header>
-  <a class="brand" href="index.html">
-    <svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#4db8ff"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#c8ecff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
-    Damla
-  </a>
-  <nav>
-    <a href="index.html">App</a>
-    <a href="docs.html">Docs</a>
-    <a href="faq.html" class="here">FAQ</a>
-    <span class="net">Mainnet</span>
-  </nav>
+  <div class="wrap header-in">
+    <a class="brand" href="index.html">
+      <svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#4db8ff"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#c8ecff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+      Damla
+    </a>
+    <nav>
+      <a href="index.html">App</a>
+      <a href="docs.html">Docs</a>
+      <a href="faq.html" class="here">FAQ</a>
+    </nav>
+    <div class="hdr-right">
+      <button class="net" id="net-toggle">Mainnet</button>
+      <button class="wallet-btn" id="wallet-connect">Connect Wallet</button>
+    </div>
+  </div>
 </header>
 
-<main class="doc">
+<main><div class="doc">
   <h1>FAQ</h1>
 
   <div class="faq-item">
@@ -72,11 +77,14 @@
     <h2>Is this on mainnet?</h2>
     <p>Damla targets Stellar mainnet. Plan signing is being rolled out; the plan builder is live now.</p>
   </div>
-</main>
+</div></main>
 
 <footer>
-  <span>No smart contract. Nothing to audit.</span>
-  <a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a>
+  <div class="wrap footer-in">
+    <span>No smart contract. Nothing to audit.</span>
+    <a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a>
+  </div>
 </footer>
+<script src="script.js"></script>
 </body>
 </html>
