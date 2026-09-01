@@ -2,6 +2,8 @@
 
 **Non-custodial recurring XLM purchases on Stellar. No smart contract. One signature.**
 
+🌐 **Live:** [damla-lake.vercel.app](https://damla-lake.vercel.app) · 📖 **Docs:** [damla-lake.vercel.app/docs.html](https://damla-lake.vercel.app/docs.html) · ❓ **FAQ:** [damla-lake.vercel.app/faq.html](https://damla-lake.vercel.app/faq.html)
+
 > *"Damlaya damlaya göl olur."* — Turkish proverb: drop by drop, a lake is formed.
 
 Damla lets a user say **"buy 100 USDC worth of XLM every week"** and walk away. The user signs once; after that, weekly USDC→XLM purchases execute automatically on Stellar's DEX. Funds never leave the user's account until each purchase settles, and no smart contract ever holds custody or authority.
