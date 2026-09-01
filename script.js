@@ -2,21 +2,23 @@
 (function () {
   var NET_KEY = 'damla-net';
 
-  var netBtn = document.getElementById('net-toggle');
+  var netSwitch = document.getElementById('net-switch');
   var net = 'mainnet';
   try { net = localStorage.getItem(NET_KEY) || 'mainnet'; } catch (e) {}
 
   function renderNet() {
-    if (!netBtn) return;
-    netBtn.textContent = net === 'mainnet' ? 'Mainnet' : 'Testnet';
-    netBtn.classList.toggle('testnet', net === 'testnet');
-    netBtn.title = 'Switch to ' + (net === 'mainnet' ? 'Testnet' : 'Mainnet');
+    if (!netSwitch) return;
+    netSwitch.querySelectorAll('button').forEach(function (b) {
+      b.classList.toggle('on', b.dataset.net === net);
+    });
   }
 
-  if (netBtn) {
-    netBtn.addEventListener('click', function () {
-      net = net === 'mainnet' ? 'testnet' : 'mainnet';
-      try { localStorage.setItem(NET_KEY, net); } catch (e) {}
+  if (netSwitch) {
+    netSwitch.addEventListener('click', function (e) {
+      var b = e.target.closest('button');
+      if (!b || b.dataset.net === net) return;
+      net = b.dataset.net;
+      try { localStorage.setItem(NET_KEY, net); } catch (e2) {}
       renderNet();
     });
     renderNet();
