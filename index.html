@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Damla — recurring XLM buys on Stellar</title>
+<style>
+  :root {
+    --bg: #071019;
+    --card: #0d1b28;
+    --line: #1c3347;
+    --text: #e8f1f8;
+    --muted: #8aa4b8;
+    --drop: #4db8ff;
+    --drop-deep: #1f8fe0;
+    --ok: #38d39f;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  header {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; }
+  .brand svg { display: block; }
+  .net {
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ok);
+    border: 1px solid var(--ok);
+    border-radius: 999px;
+    padding: 3px 10px;
+  }
+  main { width: 100%; max-width: 560px; padding: 8px 16px 48px; }
+  h1 { font-size: 26px; line-height: 1.25; margin: 8px 0 6px; }
+  .sub { color: var(--muted); font-size: 15px; margin-bottom: 24px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 22px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 16px 0 6px; }
+  label:first-child { margin-top: 0; }
+  .amount-row { display: flex; align-items: center; gap: 10px; }
+  input[type="number"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 22px;
+    font-weight: 600;
+    padding: 12px 14px;
+    width: 100%;
+    outline: none;
+  }
+  input[type="number"]:focus { border-color: var(--drop); }
+  .unit { font-size: 15px; color: var(--muted); font-weight: 600; }
+  .opts { display: flex; gap: 8px; }
+  .opt {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 0;
+    text-align: center;
+    cursor: pointer;
+  }
+  .opt.on { border-color: var(--drop); color: var(--drop); background: rgba(77,184,255,.08); }
+  .summary {
+    margin-top: 20px;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+    font-size: 14px;
+    color: var(--muted);
+    display: grid;
+    gap: 6px;
+  }
+  .summary b { color: var(--text); font-weight: 600; }
+  .row { display: flex; justify-content: space-between; }
+  button.cta {
+    width: 100%;
+    margin-top: 20px;
+    background: linear-gradient(180deg, var(--drop), var(--drop-deep));
+    border: none;
+    border-radius: 12px;
+    color: #04141f;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 15px 0;
+    cursor: pointer;
+  }
+  button.cta:disabled { opacity: .55; cursor: default; }
+  .wallet { margin-top: 10px; font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
+  .wallet .addr { color: var(--ok); font-family: ui-monospace, Menlo, monospace; }
+  .how { margin-top: 36px; }
+  .how h2 { font-size: 15px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
+  .step { display: flex; gap: 12px; margin-bottom: 14px; font-size: 14.5px; line-height: 1.45; }
+  .step .n {
+    flex: none;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--drop);
+    color: var(--drop);
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+  }
+  .step p { color: var(--muted); }
+  .step p b { color: var(--text); }
+  footer {
+    width: 100%;
+    max-width: 560px;
+    padding: 0 16px 32px;
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#4db8ff"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#c8ecff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+    Damla
+  </div>
+  <span class="net">Mainnet</span>
+</header>
+
+<main>
+  <h1>Buy XLM every week.<br>Sign only once.</h1>
+  <p class="sub">Non-custodial recurring purchases on Stellar. Your funds stay in your wallet; the protocol enforces the schedule. Drop by drop.</p>
+
+  <div class="card">
+    <label>Weekly amount</label>
+    <div class="amount-row">
+      <input id="amount" type="number" min="1" value="25">
+      <span class="unit">USDC</span>
+    </div>
+
+    <label>Duration</label>
+    <div class="opts" id="weeks">
+      <div class="opt on" data-w="4">4 weeks</div>
+      <div class="opt" data-w="8">8 weeks</div>
+      <div class="opt" data-w="12">12 weeks</div>
+    </div>
+
+    <label>Max slippage</label>
+    <div class="opts" id="slip">
+      <div class="opt" data-s="1">1%</div>
+      <div class="opt on" data-s="3">3%</div>
+      <div class="opt" data-s="5">5%</div>
+    </div>
+
+    <div class="summary">
+      <div class="row"><span>Total to commit</span><b id="total">200 USDC</b></div>
+      <div class="row"><span>Executes</span><b>every 7 days, on-chain</b></div>
+      <div class="row"><span>Custody</span><b>your wallet, always</b></div>
+    </div>
+
+    <button class="cta" id="connect">Connect Freighter</button>
+    <div class="wallet" id="wallet"></div>
+  </div>
+
+  <div class="how">
+    <h2>How it works</h2>
+    <div class="step"><div class="n">1</div><p><b>Sign once.</b> You pre-sign one transaction per week — amount, asset and destination are locked inside each signature.</p></div>
+    <div class="step"><div class="n">2</div><p><b>The protocol keeps time.</b> Each transaction is invalid until its week arrives (Stellar's <code>minSeqAge</code>). Nobody can run it early — not even us.</p></div>
+    <div class="step"><div class="n">3</div><p><b>XLM lands in your wallet.</b> Every week a path payment swaps your USDC to XLM on Stellar's DEX. Miss a week? The chain continues.</p></div>
+  </div>
+</main>
+
+<footer>
+  <span>No smart contract. Nothing to audit.</span>
+  <a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+<script>
+  let weeks = 4;
+
+  function refresh() {
+    const amt = Number(document.getElementById('amount').value) || 0;
+    document.getElementById('total').textContent = (amt * weeks).toLocaleString('en-US') + ' USDC';
+  }
+
+  function bindOpts(id, cb) {
+    const box = document.getElementById(id);
+    box.addEventListener('click', e => {
+      const el = e.target.closest('.opt');
+      if (!el) return;
+      box.querySelectorAll('.opt').forEach(o => o.classList.remove('on'));
+      el.classList.add('on');
+      cb(el);
+    });
+  }
+
+  bindOpts('weeks', el => { weeks = Number(el.dataset.w); refresh(); });
+  bindOpts('slip', () => {});
+  document.getElementById('amount').addEventListener('input', refresh);
+  refresh();
+
+  const btn = document.getElementById('connect');
+  const walletEl = document.getElementById('wallet');
+
+  btn.addEventListener('click', async () => {
+    if (btn.dataset.connected) {
+      walletEl.textContent = 'Plan signing goes live soon.';
+      return;
+    }
+    if (!window.freighterApi) {
+      walletEl.innerHTML = 'Freighter not found. <a href="https://freighter.app" target="_blank" rel="noopener" style="color:var(--drop)">Install it</a> to continue.';
+      return;
+    }
+    try {
+      const access = await window.freighterApi.requestAccess();
+      const addr = typeof access === 'string' ? access : access.address;
+      if (!addr) throw new Error('no address');
+      btn.dataset.connected = '1';
+      btn.textContent = 'Sign plan';
+      walletEl.innerHTML = 'Connected: <span class="addr">' + addr.slice(0, 5) + '…' + addr.slice(-5) + '</span>';
+    } catch (e) {
+      walletEl.textContent = 'Connection declined.';
+    }
+  });
+</script>
+</body>
+</html>
