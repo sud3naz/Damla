@@ -34,17 +34,17 @@
 
   <div class="faq-item">
     <h2>Do you hold my money?</h2>
-    <p>No. Your USDC sits in your own wallet until the moment each weekly swap settles on Stellar's DEX. There is no deposit, no vault, no contract balance. The XLM you buy lands directly in the same wallet.</p>
+    <p>No. Your USDC sits in your own wallet until the moment each scheduled swap settles on Stellar's DEX. There is no deposit, no vault, no contract balance. The XLM you buy lands directly in the same wallet.</p>
   </div>
 
   <div class="faq-item">
     <h2>What exactly am I signing?</h2>
-    <p>One transaction per week of your plan, each containing a single swap: a fixed USDC amount to XLM with a minimum-received floor. The amount, asset, destination and floor are locked inside each signature and cannot be changed by anyone afterwards — including us.</p>
+    <p>One transaction per purchase in your plan, each containing a single swap: a fixed USDC amount to XLM with a minimum-received floor. The amount, asset, destination and floor are locked inside each signature and cannot be changed by anyone afterwards — including us.</p>
   </div>
 
   <div class="faq-item">
     <h2>Can Damla run my purchases early, or drain my account?</h2>
-    <p>No. Each transaction is invalid until its week arrives — that's enforced by every Stellar validator, not by our code. And each signature covers exactly one pre-defined swap, so nothing else in your account can be touched. The worst a malicious or broken service can do is not submit, in which case nothing happens.</p>
+    <p>No. Each transaction is invalid until its scheduled date arrives — that's enforced by every Stellar validator, not by our code. And each signature covers exactly one pre-defined swap, so nothing else in your account can be touched. The worst a malicious or broken service can do is not submit, in which case nothing happens.</p>
   </div>
 
   <div class="faq-item">
@@ -53,13 +53,13 @@
   </div>
 
   <div class="faq-item">
-    <h2>What if the price spikes during one of my weeks?</h2>
-    <p>Every swap has a minimum-received floor derived from the price at signing plus the tolerance you chose (1–5%). If the market moves outside your band that week, the purchase is skipped instead of filled badly, and your plan continues the next week.</p>
+    <h2>What if the price spikes on one of my purchase dates?</h2>
+    <p>Every swap has a minimum-received floor derived from the price at signing plus the tolerance you chose (1–5%). If the market moves outside your band on that date, the purchase is skipped instead of filled badly, and your plan continues on the next one.</p>
   </div>
 
   <div class="faq-item">
-    <h2>What happens if a week is missed?</h2>
-    <p>The chain is built to survive gaps: each week's transaction stays valid across a window, so a skipped week doesn't break the ones after it.</p>
+    <h2>What happens if a purchase is missed?</h2>
+    <p>The chain is built to survive gaps: each purchase's transaction stays valid across a window, so a skipped one doesn't break the ones after it.</p>
   </div>
 
   <div class="faq-item">
