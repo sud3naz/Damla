@@ -1,0 +1,7 @@
+[Unit]
+Description=Damla health watchdog
+[Service]
+Type=oneshot
+ExecStart=/opt/damla/deployment/damla-watch.sh
+StandardOutput=append:/var/log/damla-watch.log
+StandardError=append:/var/log/damla-watch.log

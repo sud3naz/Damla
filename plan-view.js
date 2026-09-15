@@ -50,7 +50,7 @@
       var s = STATUS[t.status] || [t.status, ''];
       var when = t.status === 'success' ? fmt(t.executedAt) : fmt(t.minTime) + ' → ' + fmt(t.maxTime);
       var res = t.status === 'success'
-        ? '<b>' + num(t.receivedXlm, 4) + ' XLM</b> · ledger ' + esc(t.ledger) + ' · <a href="' + explorer + '/tx/' + esc(t.hash) + '" target="_blank" rel="noopener">' + esc(short(String(t.hash))) + '</a>'
+        ? '<b>' + num(t.receivedXlm, 4) + ' XLM</b> · ledger ' + esc(t.ledger) + ' · <a href="' + explorer + '/tx/' + esc(t.hash) + '" target="_blank" rel="noopener">' + esc(short(String(t.hash))) + '</a>' + (t.note ? '<br><span class="dim small">' + esc(t.note) + '</span>' : '')
         : esc(t.note || (t.status === 'pending' && t.minTime > now ? 'not yet: protocol rejects it before ' + new Date(t.minTime * 1000).toLocaleString() : ''));
       return '<tr><td>' + esc(t.idx) + '</td><td><span class="pill ' + s[1] + '">' + esc(s[0]) + '</span></td><td>' + when + '</td><td>' + res + '</td></tr>';
     }).join('');

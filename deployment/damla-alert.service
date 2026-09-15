@@ -1,0 +1,5 @@
+[Unit]
+Description=Damla failure alert
+[Service]
+Type=oneshot
+ExecStart=/opt/damla/deployment/damla-alert.sh

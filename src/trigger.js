@@ -6,7 +6,8 @@
  * consumes its sequence slot; the purchase simply waits until its window ends.
  */
 import { NETWORKS } from './config.js'
-import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, submitXdr, server } from './horizon.js'
+import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, server } from './horizon.js'
+import { submitWithFeeBump } from './feebump.js'
 import { abandonDraft, receivedXlm } from './plan.js'
 
 const CLOCK_MARGIN = 6 // seconds
@@ -25,10 +26,11 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
 
   async function submit(net, plan, tx) {
     try {
-      const res = await submitXdr(net, tx.xdr)
+      const res = await submitWithFeeBump(net, tx.xdr, { log: (m) => log(`[${plan.id.slice(0, 8)}] #${tx.idx} ${m}`) })
       const received = receivedXlm(res.result_xdr)
-      mark(plan.id, tx.idx, 'success', null, { ledger: res.ledger, received, executedAt: now(), attempt: true })
-      log(`[${plan.id.slice(0, 8)}] #${tx.idx} success ledger ${res.ledger} received ${received} XLM hash ${res.hash}`)
+      const note = res.bumped ? `fee bumped by the treasury (${res.feePerOp} stroops/op), outer hash ${res.hash}` : null
+      mark(plan.id, tx.idx, 'success', note, { ledger: res.ledger, received, executedAt: now(), attempt: true })
+      log(`[${plan.id.slice(0, 8)}] #${tx.idx} success ledger ${res.ledger} received ${received} XLM hash ${res.hash}${res.bumped ? ' (fee bumped)' : ''}`)
       return 'success'
     } catch (err) {
       const rc = resultCodes(err)

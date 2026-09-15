@@ -2,6 +2,7 @@
 Description=Damla API + trigger (testnet)
 After=network-online.target
 Wants=network-online.target
+OnFailure=damla-alert.service
 
 [Service]
 Type=simple

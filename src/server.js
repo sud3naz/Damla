@@ -124,6 +124,7 @@ export function createServer(db, { webRoot } = {}) {
         networks: enabledNetworks(),
         periods: Object.fromEntries(Object.entries(PERIODS).map(([k, v]) => [k, v])),
         limits: LIMITS,
+        maxAmount: Object.fromEntries(Object.entries(NETWORKS).map(([k, v]) => [k, Math.min(LIMITS.maxAmount, v.maxAmount || LIMITS.maxAmount)])),
         usdc: Object.fromEntries(Object.entries(NETWORKS).map(([k, v]) => [k, v.usdc])),
       }, origin)
     }

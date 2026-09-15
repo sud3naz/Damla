@@ -48,3 +48,12 @@ Plan activated at 1789483435. Channel key destroyed: true.
 User balances at the end: {"xlm":"9955.6319499","usdcTrustline":true,"usdc":"60.0000000"}
 
 Plan status: completed. Merge tx (returns channel reserve to treasury) becomes valid at 1789483847.
+
+## Fee-bump proof (2026-09-15T15:28:23.026Z)
+
+Purchase envelope signed by user `GCNWGTWOHOFVITDVJG7KKJ6BPJPMUXU75CB3PXBHYYX6AXEMJVN47D2I` and channel `GCCBAVD4Q64U4FF7Q3AK6LE7BS4ZZOU3TLEZQ4O6HWOLNCPWJICKG4N5`, fee deliberately set to 50 stroops (network minimum is 100). Inner hash `4a06c412b2a6ee5f9bd681c159b1065ae1ebe5d5dd7225fe3c2745113fd918d8`.
+
+- plain submission: network answered `tx_insufficient_fee` ✅
+- tx_insufficient_fee, retrying with a treasury fee bump at 1000000 stroops/op
+- fee-bumped submission: ledger 4692504, bumped=true, outer hash [c71e502375d8…](https://stellar.expert/explorer/testnet/tx/c71e502375d8773a5b75855d7bf1cca216dec3a13090579348c91517ee524cb8), user received 10.0000000 XLM ✅
+- Horizon resolves the unchanged inner hash too: HTTP 200. No user signature was needed; every precondition of the inner transaction still applied.

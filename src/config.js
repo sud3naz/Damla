@@ -13,6 +13,8 @@ export const NETWORKS = {
     treasurySecret: env.DAMLA_TESTNET_TREASURY_SECRET || null,
     baseFee: 100,
     tickMs: 5000,
+    maxAmount: 10000,
+    enabled: true,
     channelFunding: '5', // XLM from the testnet treasury (friendbot only if no treasury is configured)
   },
   mainnet: {
@@ -25,6 +27,8 @@ export const NETWORKS = {
     treasurySecret: env.DAMLA_MAINNET_TREASURY_SECRET || null,
     baseFee: 1000,
     tickMs: 30000,
+    maxAmount: Number(env.DAMLA_MAINNET_MAX_AMOUNT || 250), // beta cap per purchase, bounds the "bad moment" risk
+    enabled: env.DAMLA_MAINNET_ENABLED === '1', // key may be prepared before the treasury is funded
     channelFunding: '2.5', // XLM: 1 XLM base reserve + fees, merged back when the plan ends
   },
 }
@@ -58,6 +62,6 @@ export const SERVER = {
 
 export function enabledNetworks() {
   return Object.values(NETWORKS)
-    .filter((n) => n.friendbot || n.treasurySecret)
+    .filter((n) => n.enabled && (n.friendbot || n.treasurySecret))
     .map((n) => n.key)
 }

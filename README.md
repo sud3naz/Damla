@@ -75,7 +75,7 @@ API: `GET /api/health`, `GET /api/quote`, `GET /api/account`, `POST /api/plans` 
 
 ## Status
 
-Testnet: planner, signing, trigger, plan page, export, 1-minute demo cadence, test-USDC helper. Channel accounts are funded by a per-network treasury (`DAMLA_TESTNET_TREASURY_SECRET`, friendbot-fed; `DAMLA_MAINNET_TREASURY_SECRET`, 2.5 XLM per plan, merged back when the plan ends or the draft is abandoned). Mainnet needs only that key; the code path is identical. Security controls and residual risks: [SECURITY.md](SECURITY.md).
+Testnet: planner, signing, trigger, plan page, export, 1-minute demo cadence, test-USDC helper. Channel accounts are funded by a per-network treasury (`DAMLA_TESTNET_TREASURY_SECRET`, friendbot-fed; `DAMLA_MAINNET_TREASURY_SECRET`, 2.5 XLM per plan, merged back when the plan ends or the draft is abandoned). Mainnet also needs `DAMLA_MAINNET_ENABLED=1` (purchases capped at 250 USDC during beta). Surge pricing is handled with treasury-paid fee bumps, no user signature needed. Security controls and residual risks: [SECURITY.md](SECURITY.md).
 
 ## Open question
 
