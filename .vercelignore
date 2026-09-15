@@ -1,0 +1,10 @@
+src
+scripts
+tests
+deployment
+node_modules
+package.json
+package-lock.json
+.env
+*.db
+*.db-*

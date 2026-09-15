@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Damla Plan</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 28'%3E%3Cpath d='M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z' fill='%234db8ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script src="vendor/freighter-api.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<header>
+  <div class="wrap header-in">
+    <a class="brand" href="index.html">
+      <svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#4db8ff"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#c8ecff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+      Damla
+    </a>
+    <nav>
+      <a href="index.html">App</a>
+      <a href="docs.html">Docs</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+    <div class="hdr-right">
+      <div class="net-switch" id="net-switch">
+        <button data-net="testnet" class="on">Testnet</button>
+        <button data-net="mainnet">Mainnet</button>
+      </div>
+      <button class="wallet-btn" id="wallet-connect">Connect Wallet</button>
+    </div>
+  </div>
+</header>
+
+<main><div class="doc planpage">
+  <div id="plan"><p class="dim">Loading plan…</p></div>
+</div></main>
+
+<footer>
+  <div class="wrap footer-in">
+    <span>Damla</span>
+    <a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a>
+  </div>
+</footer>
+<script src="script.js"></script>
+<script src="plan-view.js"></script>
+</body>
+</html>

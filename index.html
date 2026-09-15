@@ -6,6 +6,8 @@
 <title>Damla</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 28'%3E%3Cpath d='M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z' fill='%234db8ff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
+<script src="vendor/freighter-api.min.js"></script>
+<script src="config.js"></script>
 </head>
 <body>
 <header>
@@ -21,8 +23,8 @@
     </nav>
     <div class="hdr-right">
       <div class="net-switch" id="net-switch">
-        <button data-net="mainnet" class="on">Mainnet</button>
-        <button data-net="testnet">Testnet</button>
+        <button data-net="testnet" class="on">Testnet</button>
+        <button data-net="mainnet">Mainnet</button>
       </div>
       <button class="wallet-btn" id="wallet-connect">Connect Wallet</button>
     </div>
@@ -38,7 +40,8 @@
         <ul class="points">
           <li><b>Non-custodial.</b>&nbsp;USDC never leaves your wallet until each swap settles.</li>
           <li><b>No smart contract.</b>&nbsp;Nothing to deploy, nothing to audit, nothing to exploit.</li>
-          <li><b>Protocol-enforced timing.</b>&nbsp;Purchases can't run early — Stellar validators reject them.</li>
+          <li><b>Protocol-enforced timing.</b>&nbsp;Purchases can't run early: Stellar validators reject them.</li>
+          <li><b>Not even we can change it.</b>&nbsp;Amount, asset, floor and dates are inside your signature.</li>
           <li><b>Cancel anytime.</b>&nbsp;Move your USDC and the plan simply stops.</li>
         </ul>
       </div>
@@ -49,9 +52,11 @@
           <input id="amount" type="number" min="1" value="25">
           <span class="unit">USDC</span>
         </div>
+        <div class="quote" id="quote">&nbsp;</div>
 
         <label>Frequency</label>
         <div class="opts" id="freq">
+          <div class="opt" data-f="minute" hidden>Minute</div>
           <div class="opt" data-f="daily">Daily</div>
           <div class="opt on" data-f="weekly">Weekly</div>
           <div class="opt" data-f="monthly">Monthly</div>
@@ -64,11 +69,11 @@
           <div class="opt" data-c="12">12</div>
         </div>
 
-        <label>Max slippage</label>
-        <div class="opts" id="slip">
-          <div class="opt" data-s="1">1%</div>
-          <div class="opt on" data-s="3">3%</div>
-          <div class="opt" data-s="5">5%</div>
+        <label>Skip a purchase if XLM costs more than … above today's price</label>
+        <div class="opts" id="ceiling">
+          <div class="opt" data-s="10">+10%</div>
+          <div class="opt on" data-s="25">+25%</div>
+          <div class="opt" data-s="50">+50%</div>
         </div>
 
         <div class="summary">
@@ -77,17 +82,20 @@
           <div class="row"><span>Custody</span><b>your wallet, always</b></div>
         </div>
 
+        <div class="acct" id="acct"></div>
         <button class="cta" id="sign">Sign plan</button>
         <div class="wallet" id="wallet-note"></div>
       </div>
     </section>
 
+    <section class="my-plans" id="my-plans" hidden></section>
+
     <section class="how">
       <h2>How it works</h2>
       <div class="steps">
-        <div class="step"><div class="n">1</div><p><b>Sign once.</b> You pre-sign one transaction per purchase — amount, asset and destination are locked inside each signature.</p></div>
-        <div class="step"><div class="n">2</div><p><b>The protocol keeps time.</b> Each transaction is invalid until its date arrives (Stellar's <code>minSeqAge</code>). Nobody can run it early — not even us.</p></div>
-        <div class="step"><div class="n">3</div><p><b>XLM lands in your wallet.</b> On every scheduled date a path payment swaps your USDC to XLM on Stellar's DEX. Miss one? The chain continues.</p></div>
+        <div class="step"><div class="n">1</div><p><b>Sign in one sitting.</b> You pre-sign one transaction per purchase. Amount, asset, destination, floor and time window are locked inside each signature.</p></div>
+        <div class="step"><div class="n">2</div><p><b>The protocol keeps time.</b> Each transaction is invalid outside its window (time bounds) and until a full period has passed since the previous one (<code>minSeqAge</code>). Nobody can run it early, not even us.</p></div>
+        <div class="step"><div class="n">3</div><p><b>XLM lands in your wallet.</b> On each date a path payment swaps your USDC to XLM on Stellar's DEX. Miss one? <code>minSeqNum</code> keeps the rest of the chain valid.</p></div>
       </div>
     </section>
   </div>
@@ -101,46 +109,6 @@
 </footer>
 
 <script src="script.js"></script>
-<script>
-  let count = 4;
-  let freq = 'weekly';
-  const CADENCE = { daily: 'every day, on-chain', weekly: 'every week, on-chain', monthly: 'every month, on-chain' };
-
-  function refresh() {
-    const amt = Number(document.getElementById('amount').value) || 0;
-    document.getElementById('total').textContent = (amt * count).toLocaleString('en-US') + ' USDC';
-    document.getElementById('cadence').textContent = CADENCE[freq];
-  }
-
-  function bindOpts(id, cb) {
-    const box = document.getElementById(id);
-    box.addEventListener('click', e => {
-      const el = e.target.closest('.opt');
-      if (!el) return;
-      box.querySelectorAll('.opt').forEach(o => o.classList.remove('on'));
-      el.classList.add('on');
-      cb(el);
-    });
-  }
-
-  bindOpts('freq', el => { freq = el.dataset.f; refresh(); });
-  bindOpts('count', el => { count = Number(el.dataset.c); refresh(); });
-  bindOpts('slip', () => {});
-  document.getElementById('amount').addEventListener('input', refresh);
-  refresh();
-
-  const signBtn = document.getElementById('sign');
-  const note = document.getElementById('wallet-note');
-
-  signBtn.addEventListener('click', () => {
-    if (!window.damlaWallet.address) {
-      note.textContent = 'Connect your wallet first (top right).';
-      return;
-    }
-    note.textContent = 'Plan signing goes live soon.';
-  });
-
-  document.addEventListener('damla:connected', () => { note.textContent = ''; });
-</script>
+<script src="app.js"></script>
 </body>
 </html>

@@ -6,6 +6,8 @@
 <title>Damla FAQ</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 28'%3E%3Cpath d='M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z' fill='%234db8ff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
+<script src="vendor/freighter-api.min.js"></script>
+<script src="config.js"></script>
 </head>
 <body>
 <header>
@@ -21,8 +23,8 @@
     </nav>
     <div class="hdr-right">
       <div class="net-switch" id="net-switch">
-        <button data-net="mainnet" class="on">Mainnet</button>
-        <button data-net="testnet">Testnet</button>
+        <button data-net="testnet" class="on">Testnet</button>
+        <button data-net="mainnet">Mainnet</button>
       </div>
       <button class="wallet-btn" id="wallet-connect">Connect Wallet</button>
     </div>
@@ -39,32 +41,42 @@
 
   <div class="faq-item">
     <h2>What exactly am I signing?</h2>
-    <p>One transaction per purchase in your plan, each containing a single swap: a fixed USDC amount to XLM with a minimum-received floor. The amount, asset, destination and floor are locked inside each signature and cannot be changed by anyone afterwards — including us.</p>
+    <p>One transaction per purchase in your plan, each containing a single swap: a fixed USDC amount to XLM with a minimum-received floor, valid only inside its own time window. Amount, asset, destination, floor and window are locked inside each signature and cannot be changed by anyone afterwards, including us. Freighter will show that the transaction's source account is not your own: that is the plan's channel account, which pays the fee. The operation that moves your USDC is sourced by you.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>Why do I have to click "sign" several times?</h2>
+    <p>Freighter signs one transaction per prompt and there is one transaction per purchase. A 4-purchase plan is 4 prompts, done in one sitting. Batch signing will arrive when wallets support it; nothing in Damla changes for that.</p>
   </div>
 
   <div class="faq-item">
     <h2>Can Damla run my purchases early, or drain my account?</h2>
-    <p>No. Each transaction is invalid until its scheduled date arrives — that's enforced by every Stellar validator, not by our code. And each signature covers exactly one pre-defined swap, so nothing else in your account can be touched. The worst a malicious or broken service can do is not submit, in which case nothing happens.</p>
+    <p>No. Each transaction is invalid until its scheduled window opens, and until a full period has passed since the previous purchase. That is enforced by every Stellar validator, not by our code. Each signature covers exactly one pre-defined swap, so nothing else in your account can be touched. The worst a malicious or broken service can do is not submit, in which case nothing happens.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>What is the channel account?</h2>
+    <p>A brand-new Stellar account created for your plan alone. It is the source of every transaction, pays the sub-cent fees from its own 1 XLM reserve and owns the sequence clock that the protocol uses to keep time. Its secret key is deleted the moment your plan is activated, so nobody can ever build another transaction on it.</p>
   </div>
 
   <div class="faq-item">
     <h2>How do I cancel?</h2>
-    <p>Move or spend your USDC. Future purchases simply fail for lack of funds, with no penalty. There is nothing to withdraw because nothing was ever deposited.</p>
+    <p>Move or spend your USDC: purchases wait for funds and are skipped when their window closes, with no penalty. The plan page also has a Stop button that tells the service to stop submitting. Nothing was ever deposited, so there is nothing to withdraw.</p>
   </div>
 
   <div class="faq-item">
-    <h2>What if the price spikes on one of my purchase dates?</h2>
-    <p>Every swap has a minimum-received floor derived from the price at signing plus the tolerance you chose (1–5%). If the market moves outside your band on that date, the purchase is skipped instead of filled badly, and your plan continues on the next one.</p>
+    <h2>What if XLM spikes on one of my purchase dates?</h2>
+    <p>You chose a ceiling when you signed (+10%, +25% or +50% above the price at signing). If XLM is above it when the window opens, the purchase waits; if the price does not come back within the window, it is skipped and the plan continues with the next one. A falling price never blocks a purchase, you just receive more XLM.</p>
   </div>
 
   <div class="faq-item">
     <h2>What happens if a purchase is missed?</h2>
-    <p>The chain is built to survive gaps: each purchase's transaction stays valid across a window, so a skipped one doesn't break the ones after it.</p>
+    <p>The chain is built to survive gaps: each purchase is valid across a range of sequence numbers, so a skipped one does not break the ones after it. Each window is two periods long, so a late submission is not lost either.</p>
   </div>
 
   <div class="faq-item">
     <h2>What are the fees?</h2>
-    <p>Stellar network fees are fractions of a cent and are paid by the service's channel account, not you. The swap itself executes at DEX market price within your slippage floor.</p>
+    <p>Stellar network fees are fractions of a cent and are paid by the plan's channel account, not you. The swap itself executes at DEX market price, never below your floor. Damla takes nothing.</p>
   </div>
 
   <div class="faq-item">
@@ -74,13 +86,19 @@
 
   <div class="faq-item">
     <h2>Is there a smart contract? Has it been audited?</h2>
-    <p>There is no smart contract, which is the point: there is no contract code to audit or exploit. The schedule and the limits are enforced by Stellar protocol rules (<code>minSeqAge</code>, <code>minSeqNum</code>, signed transaction hashes).</p>
+    <p>There is no smart contract, which is the point: there is no contract code to audit or exploit. The schedule and the limits are enforced by Stellar protocol rules (time bounds, <code>minSeqAge</code>, <code>minSeqNum</code>, signed transaction hashes). The testnet proof in the repository shows each rule being enforced by the network.</p>
+  </div>
+
+  <div class="faq-item">
+    <h2>What if Damla shuts down?</h2>
+    <p>Export your plan from the plan page. You get every signed envelope; anyone can submit them inside their windows and nobody can alter them. Your plan does not depend on us existing.</p>
   </div>
 
   <div class="faq-item">
     <h2>Is this on mainnet?</h2>
-    <p>Damla targets Stellar mainnet. Plan signing is being rolled out; the plan builder is live now.</p>
+    <p>Damla runs on testnet today. Everything works the same on mainnet; it needs a funded treasury for channel reserves, which is the next step. The network switch at the top right shows what this server has enabled.</p>
   </div>
+
 </div></main>
 
 <footer>

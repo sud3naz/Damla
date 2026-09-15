@@ -6,6 +6,8 @@
 <title>Damla Docs</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 28'%3E%3Cpath d='M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z' fill='%234db8ff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
+<script src="vendor/freighter-api.min.js"></script>
+<script src="config.js"></script>
 </head>
 <body>
 <header>
@@ -21,8 +23,8 @@
     </nav>
     <div class="hdr-right">
       <div class="net-switch" id="net-switch">
-        <button data-net="mainnet" class="on">Mainnet</button>
-        <button data-net="testnet">Testnet</button>
+        <button data-net="testnet" class="on">Testnet</button>
+        <button data-net="mainnet">Mainnet</button>
       </div>
       <button class="wallet-btn" id="wallet-connect">Connect Wallet</button>
     </div>
@@ -37,7 +39,7 @@
       <a href="#architecture">Architecture</a>
       <a href="#security">Security model</a>
       <a href="#cancel">Cancelling a plan</a>
-      <a href="#slippage">Slippage</a>
+      <a href="#slippage">The floor</a>
       <a href="#roadmap">Roadmap</a>
     </aside>
 
@@ -47,35 +49,36 @@
 
       <section id="what">
         <h2>What is Damla?</h2>
-        <p>Damla is dollar-cost averaging (DCA) for Stellar: you commit to buying a fixed amount of XLM with USDC at a frequency you choose (daily, weekly, or monthly), sign once, and the purchases execute automatically on Stellar's built-in DEX. It is <b>non-custodial</b> — your USDC stays in your own wallet until the moment each swap settles — and it uses <b>no smart contract</b>.</p>
+        <p>Damla is dollar-cost averaging (DCA) for Stellar: you commit to buying a fixed amount of XLM with USDC at a frequency you choose (daily, weekly, or monthly), sign in one sitting, and the purchases execute automatically on Stellar's built-in DEX. It is <b>non-custodial</b>: your USDC stays in your own wallet until the moment each swap settles. It uses <b>no smart contract</b>.</p>
         <div class="note"><i>Damla</i> is Turkish for "drop", from the proverb <i>damlaya damlaya göl olur</i>: drop by drop, a lake is formed. That is the whole product.</div>
       </section>
 
       <section id="architecture">
         <h2>Architecture</h2>
-        <p>Damla is built on <b>pre-signed transaction chains</b> using classic Stellar features. No Soroban, no contract accounts — it works today with Freighter and a regular G-address.</p>
+        <p>Damla is built on <b>pre-signed transaction chains</b> using classic Stellar features (CAP-21 preconditions, Protocol 19). No Soroban, no contract accounts. It works today with Freighter and a regular G-address.</p>
 
         <div class="arch-step">
           <div class="n">1</div>
           <div>
             <h3>One transaction per purchase, signed up front</h3>
-            <p>When you create a plan, Damla builds one Stellar transaction for each scheduled purchase. Every transaction contains a single <code>PathPaymentStrictSend</code> operation: send a fixed amount of your USDC, receive XLM, with a <code>destMin</code> floor protecting you from bad fills. You sign all of them in one sitting. The amount, asset, destination, and floor are inside each signed hash and can never be altered afterwards.</p>
+            <p>When you create a plan, Damla builds one Stellar transaction for each scheduled purchase. Every transaction contains a single <code>PathPaymentStrictSend</code> operation: send a fixed amount of your USDC, receive XLM, with a <code>destMin</code> floor protecting you from bad fills. You sign all of them in one sitting (one Freighter prompt each). The amount, asset, destination, floor and time window are inside each signed hash and can never be altered afterwards.</p>
           </div>
         </div>
 
         <div class="arch-step">
           <div class="n">2</div>
           <div>
-            <h3>The protocol keeps time, not our server</h3>
-            <p>Each transaction carries a <code>minSeqAge</code> precondition: it is <b>invalid by consensus</b> until enough time has passed since the source account's sequence number last changed. Submitting early is not "against the rules" — it is simply rejected by every validator on the network. The cadence you chose, daily, weekly, or monthly, is enforced by Stellar itself.</p>
+            <h3>A fresh channel account per plan</h3>
+            <p>Each plan gets its own brand-new <b>channel account</b>. It is the <i>source</i> of every transaction (it pays the sub-cent fees and owns the sequence clock), while the <i>operation's</i> source is you. Two reasons. First, the chain lives on the channel's sequence numbers, so nothing you do in your own wallet can invalidate or delay it. Second, the channel does nothing else, so its clock is clean. The channel never holds user funds: only its own 1 XLM reserve, which a pre-signed merge returns to the service after the plan ends.</p>
+            <p><b>The channel's secret key is destroyed the moment your plan is activated.</b> It signs your purchases once, then it is deleted. After that, the only transactions that can ever be built on that account are the ones you co-signed.</p>
           </div>
         </div>
 
         <div class="arch-step">
           <div class="n">3</div>
           <div>
-            <h3>Channel account</h3>
-            <p>The transaction's <i>source</i> is a dedicated channel account owned by the service, while the <i>operation's</i> source is you. This matters because <code>minSeqAge</code> measures the source account's sequence age: if your own account were the source, any unrelated transaction you make would reset the clock and delay your purchases. The channel account does nothing else, so its clock stays clean. It also pays the (sub-cent) network fees and never holds user funds.</p>
+            <h3>The protocol keeps time, not our server</h3>
+            <p>Purchase <i>i</i> carries <b>time bounds</b> for its calendar window (it opens at <code>t0 + (i-1)·P</code> and closes two periods later) and a <code>minSeqAge</code> of one full period: it is <b>invalid by consensus</b> until the channel's sequence number has been untouched for a whole period. So a purchase can never run before its date, and two purchases can never land closer together than one period, no matter what our server does. Submitting early is not "against the rules": every validator simply rejects it with <code>tx_too_early</code>.</p>
           </div>
         </div>
 
@@ -83,7 +86,15 @@
           <div class="n">4</div>
           <div>
             <h3>Skipped purchases don't break the chain</h3>
-            <p>Transactions carry <code>minSeqNum</code> ranges, so each purchase's transaction is valid across a window of sequence numbers rather than a single point. If one is missed, the next still works; executing any transaction automatically invalidates the earlier ones. A swap that fails at the operation level (for example, the <code>destMin</code> floor not met) consumes its slot and the chain continues.</p>
+            <p>Every transaction carries <code>minSeqNum</code> = the channel's starting sequence, so purchase <i>i</i> is valid for any channel sequence between the start and its own number, not for a single point. If purchase 3 is skipped (window closed, XLM above your ceiling, no USDC), purchase 4 still works. Executing any purchase advances the sequence and invalidates all earlier envelopes for good. A swap that fails at the operation level consumes its slot and the chain continues.</p>
+          </div>
+        </div>
+
+        <div class="arch-step">
+          <div class="n">5</div>
+          <div>
+            <h3>The trigger service</h3>
+            <p>A small service stores your signed envelopes and submits each one when its window opens. Before submitting it checks that the market currently gives at least your floor and that your wallet holds the USDC, because a transaction that fails on-chain still burns its slot. It cannot do anything else: it holds no keys that matter. You can <b>export</b> your signed envelopes at any time and submit them yourself if the service ever disappears.</p>
           </div>
         </div>
       </section>
@@ -92,30 +103,34 @@
         <h2>Security model</h2>
         <p>There is no contract to audit because there is no contract. The trust assumptions reduce to Stellar's own protocol rules. Even a <b>fully compromised</b> trigger service:</p>
         <ul class="sec-list">
-          <li>cannot submit a purchase early — <code>minSeqAge</code> and time bounds are checked by consensus</li>
-          <li>cannot change the amount, asset, destination, or slippage floor — they are inside your signed hash</li>
-          <li>cannot touch anything else in your account — the signature covers exactly one operation</li>
-          <li class="worst">can at worst <i>fail to submit</i> — no purchase happens, no funds move</li>
+          <li>cannot submit a purchase early: time bounds and <code>minSeqAge</code> are checked by consensus</li>
+          <li>cannot run two purchases inside one period: <code>minSeqAge</code> again</li>
+          <li>cannot change the amount, asset, destination or floor: they are inside your signed hash (<code>tx_bad_auth</code> otherwise)</li>
+          <li>cannot touch anything else in your account: each signature covers exactly one operation</li>
+          <li>cannot create new transactions on the channel: its key no longer exists</li>
+          <li class="worst">can at worst <i>fail to submit</i>, or pick a bad moment inside a window. No purchase happens, or you get a fill no worse than your floor.</li>
         </ul>
-        <p style="margin-top:12px">The only residual risk is timing within each allowed execution window, and your own <code>destMin</code> bounds how bad that timing can be.</p>
+        <p style="margin-top:12px">All of this was exercised on testnet: <a href="https://github.com/sud3naz/Damla/blob/main/docs/PROOF-testnet.md" target="_blank" rel="noopener">docs/PROOF-testnet.md</a> lists the rejected early submission, the rejected tampered envelope, four consecutive automatic purchases and the invalidated stale envelope, with hashes.</p>
       </section>
 
       <section id="cancel">
         <h2>Cancelling a plan</h2>
-        <p>Your USDC never leaves your wallet in advance, so cancelling is trivial: move or spend the USDC, and future purchases simply fail for lack of funds. No permission needed, no lockup, nothing to withdraw.</p>
+        <p>Your USDC never leaves your wallet in advance, so cancelling is trivial: move or spend the USDC and future purchases simply wait for funds until their window closes. There is no lockup and nothing to withdraw. The plan page also has a <b>Stop</b> button that tells the service to stop submitting; the signed envelopes themselves stay valid inside their windows, which is why moving the USDC is the hard stop.</p>
       </section>
 
       <section id="slippage">
-        <h2>Slippage (<code>destMin</code>)</h2>
-        <p>Because transactions are signed weeks in advance, the slippage floor is fixed at signing time. Damla derives it from the market price when you sign, widened by the tolerance you pick (1–5%). A purchase whose price falls outside your band is skipped rather than filled badly, and the chain continues on the next date.</p>
+        <h2>The floor (<code>destMin</code>)</h2>
+        <p>Because transactions are signed weeks in advance, the minimum amount of XLM you accept per purchase is fixed at signing time. Damla does not treat this as a slippage setting, because a DCA buyer <i>wants</i> to keep buying as the price moves. It is a <b>ceiling</b>: you choose how far above today's price you are still willing to buy (+10%, +25%, +50%). The floor is today's quote divided by that factor.</p>
+        <p>If XLM rises past your ceiling, that purchase waits and, if the market does not come back within its two-period window, is skipped. Falling prices never block a purchase; you simply receive more XLM. The floor is also the hard bound on how badly any submission can fill, honest service or not.</p>
+        <div class="note">Open design question, still: a floor fixed for 12 weeks is crude. A monthly re-sign cadence ("sign once a month, buy every week") is the likely next step. It changes nothing in the protocol layer, only how often the planner asks for signatures.</div>
       </section>
 
       <section id="roadmap">
         <h2>Roadmap</h2>
         <ul class="timeline">
-          <li class="now"><b>Now</b>Plan builder frontend, Freighter connection.</li>
-          <li><b>Next</b>Plan signing + trigger service, first live plans on mainnet.</li>
-          <li><b>Later</b>Live pricing from Horizon, skipped-week rollover, monthly re-sign option, more pairs.</li>
+          <li class="now"><b>Now</b>Planner, Freighter signing, trigger service, plan page, export. Testnet, with a 1-minute demo cadence and a testnet USDC helper.</li>
+          <li><b>Next</b>Mainnet switch-on (a funded treasury for channel reserves), monthly re-sign option, e-mail or Telegram receipts.</li>
+          <li><b>Later</b>More pairs (EURC, yXLM), wallet-side batch signing when wallets support it, a self-hosted trigger you can run yourself.</li>
         </ul>
       </section>
     </div>

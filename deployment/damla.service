@@ -1,0 +1,26 @@
+[Unit]
+Description=Damla API + trigger (testnet)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=damla
+Group=damla
+WorkingDirectory=/opt/damla
+EnvironmentFile=/etc/damla/env
+Environment=HOST=127.0.0.1
+Environment=PORT=8944
+Environment=DAMLA_DB=/var/lib/damla/damla.db
+ExecStart=/usr/bin/node src/main.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/damla
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
