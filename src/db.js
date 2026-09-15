@@ -53,6 +53,9 @@ export function openDb(path) {
       PRIMARY KEY (plan_id, idx)
     );
   `)
+  // additive migrations
+  const cols = db.prepare('PRAGMA table_info(plans)').all().map((c) => c.name)
+  if (!cols.includes('next_check_at')) db.exec('ALTER TABLE plans ADD COLUMN next_check_at INTEGER NOT NULL DEFAULT 0')
   return db
 }
 

@@ -7,7 +7,7 @@
  */
 import { NETWORKS } from './config.js'
 import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, submitXdr, server } from './horizon.js'
-import { receivedXlm } from './plan.js'
+import { abandonDraft, receivedXlm } from './plan.js'
 
 const CLOCK_MARGIN = 6 // seconds
 const TERMINAL = new Set(['success', 'failed', 'expired', 'superseded', 'cancelled'])
@@ -16,6 +16,8 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
   const setTx = db.prepare('UPDATE txs SET status = ?, note = ?, result_code = ?, ledger = ?, received_xlm = ?, executed_at = ?, attempts = attempts + ? WHERE plan_id = ? AND idx = ?')
   const noteTx = db.prepare('UPDATE txs SET note = ? WHERE plan_id = ? AND idx = ?')
   const setPlan = db.prepare('UPDATE plans SET status = ?, note = ?, ended_at = ? WHERE id = ?')
+  const setNext = db.prepare('UPDATE plans SET next_check_at = ? WHERE id = ?')
+  const WAIT_RETRY = 30 // seconds between re-checks while a purchase waits on funds or price
 
   function mark(planId, idx, status, note, extra = {}) {
     setTx.run(status, note ?? null, extra.code ?? null, extra.ledger ?? null, extra.received ?? null, extra.executedAt ?? null, extra.attempt ? 1 : 0, planId, idx)
@@ -55,12 +57,30 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
     }
   }
 
+  /** Earliest moment at which this plan can need a Horizon call: a window opening or closing, or the merge. */
+  function nextDue(plan, buys, merge) {
+    let due = Infinity
+    for (const tx of buys) {
+      if (TERMINAL.has(tx.status)) continue
+      due = Math.min(due, tx.min_time + CLOCK_MARGIN, tx.max_time + 1)
+    }
+    if (due === Infinity && merge && merge.status === 'pending') due = merge.min_time
+    return due
+  }
+
   async function tickPlan(plan) {
     const net = NETWORKS[plan.network]
     const t = now()
     const txs = db.prepare('SELECT * FROM txs WHERE plan_id = ? ORDER BY idx').all(plan.id)
     const buys = txs.filter((x) => x.kind === 'buy')
     const merge = txs.find((x) => x.kind === 'merge') || null
+
+    // no Horizon traffic while nothing can happen yet
+    if (t < (plan.next_check_at || 0)) return
+    const due = nextDue(plan, buys, merge)
+    if (due === Infinity) { if (plan.status === 'active') setPlan.run('completed', null, null, plan.id); return }
+    if (t < due) { setNext.run(due, plan.id); return }
+    let nextCheck = 0
 
     const chan = await loadAccountOrNull(net, plan.channel)
     if (!chan) {
@@ -80,19 +100,22 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
       if (t < tx.min_time + CLOCK_MARGIN) break
       if (tx.min_seq_age > 0 && seqTime && t < seqTime + tx.min_seq_age + CLOCK_MARGIN) {
         noteTx.run(`waiting: channel sequence must be ${tx.min_seq_age}s old (${seqTime + tx.min_seq_age - t}s left)`, plan.id, tx.idx)
+        nextCheck = seqTime + tx.min_seq_age + CLOCK_MARGIN
         break
       }
       const user = await loadAccountOrNull(net, plan.user)
-      if (!user) { noteTx.run('waiting: user account missing', plan.id, tx.idx); break }
+      if (!user) { noteTx.run('waiting: user account missing', plan.id, tx.idx); nextCheck = t + WAIT_RETRY; break }
       const bal = balances(user, net)
       if (!bal.usdcTrustline || Number(bal.usdc) < Number(plan.amount)) {
         noteTx.run(`waiting: user has ${bal.usdc} USDC, needs ${plan.amount}`, plan.id, tx.idx)
+        nextCheck = t + WAIT_RETRY
         break
       }
       const quote = await quoteStrictSend(net, plan.amount)
-      if (!quote) { noteTx.run('waiting: no direct XLM/USDC market', plan.id, tx.idx); break }
+      if (!quote) { noteTx.run('waiting: no direct XLM/USDC market', plan.id, tx.idx); nextCheck = t + WAIT_RETRY; break }
       if (Number(quote) < Number(tx.dest_min)) {
         noteTx.run(`waiting: market gives ${quote} XLM, floor is ${tx.dest_min} (XLM above your ceiling)`, plan.id, tx.idx)
+        nextCheck = t + WAIT_RETRY
         break
       }
       await submit(net, plan, tx)
@@ -102,6 +125,7 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
     const fresh = db.prepare("SELECT status FROM txs WHERE plan_id = ? AND kind = 'buy'").all(plan.id)
     const allDone = fresh.every((x) => TERMINAL.has(x.status))
     if (allDone && plan.status === 'active') setPlan.run('completed', null, null, plan.id)
+    setNext.run(nextCheck, plan.id)
 
     if (merge && merge.status === 'pending' && t >= merge.min_time && (allDone || plan.status === 'cancelled')) {
       const r = await submit(net, { ...plan }, merge)
@@ -113,16 +137,20 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
     const t = now()
     const stale = db.prepare("SELECT id FROM plans WHERE status = 'draft' AND created_at < ?").all(t - ttlSeconds)
     for (const { id } of stale) {
-      db.prepare("UPDATE plans SET status = 'abandoned', channel_secret = NULL, ended_at = ? WHERE id = ?").run(t, id)
-      db.prepare("UPDATE txs SET status = 'cancelled' WHERE plan_id = ? AND kind = 'buy'").run(id)
-      log(`[${id.slice(0, 8)}] draft abandoned`)
+      await abandonDraft(db, id, t)
+      log(`[${id.slice(0, 8)}] draft abandoned, channel merged back`)
     }
   }
 
+  let pausedUntil = 0
   async function tick() {
+    if (now() < pausedUntil) return
     const plans = db.prepare("SELECT * FROM plans WHERE status IN ('active', 'completed', 'cancelled')").all()
     for (const plan of plans) {
-      try { await tickPlan(plan) } catch (err) { log(`[${plan.id.slice(0, 8)}] tick error: ${err.message}`) }
+      try { await tickPlan(plan) } catch (err) {
+        if (err?.response?.status === 429) { pausedUntil = now() + 60; log('horizon rate limit, pausing the trigger for 60s'); return }
+        log(`[${plan.id.slice(0, 8)}] tick error: ${err.message}`)
+      }
     }
   }
 

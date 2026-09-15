@@ -13,7 +13,7 @@ export const NETWORKS = {
     treasurySecret: env.DAMLA_TESTNET_TREASURY_SECRET || null,
     baseFee: 100,
     tickMs: 5000,
-    channelFunding: null, // friendbot
+    channelFunding: '5', // XLM from the testnet treasury (friendbot only if no treasury is configured)
   },
   mainnet: {
     key: 'mainnet',

@@ -11,9 +11,18 @@ export function usdcAsset(net) {
   return new Asset(net.usdc.code, net.usdc.issuer)
 }
 
+/** One retry after a short pause when Horizon answers 429 (the VPS shares its Horizon budget with other services). */
+export async function withRetry(fn) {
+  try { return await fn() } catch (err) {
+    if (err?.response?.status !== 429) throw err
+    await new Promise((r) => setTimeout(r, 2500))
+    return fn()
+  }
+}
+
 export async function loadAccountOrNull(net, publicKey) {
   try {
-    return await server(net).loadAccount(publicKey)
+    return await withRetry(() => server(net).loadAccount(publicKey))
   } catch (err) {
     if (err?.response?.status === 404) return null
     throw err
@@ -49,8 +58,9 @@ export async function quoteStrictSend(net, amount) {
   u.searchParams.set('source_asset_issuer', net.usdc.issuer)
   u.searchParams.set('source_amount', amount)
   u.searchParams.set('destination_assets', 'native')
-  const res = await fetch(u)
-  if (!res.ok) throw new Error(`horizon paths ${res.status}`)
+  let res = await fetch(u)
+  if (res.status === 429) { await new Promise((r) => setTimeout(r, 2500)); res = await fetch(u) }
+  if (!res.ok) { const e = new Error(`horizon paths ${res.status}`); e.response = { status: res.status }; throw e }
   const data = await res.json()
   const direct = data._embedded.records.find((r) => r.path.length === 0)
   return direct ? direct.destination_amount : null
@@ -74,7 +84,7 @@ export async function submitXdr(net, xdr) {
 /** Mainnet: create and fund a channel account from the treasury. */
 export async function fundFromTreasury(net, destination) {
   const treasury = Keypair.fromSecret(net.treasurySecret)
-  const acct = await server(net).loadAccount(treasury.publicKey())
+  const acct = await withRetry(() => server(net).loadAccount(treasury.publicKey()))
   const tx = new TransactionBuilder(acct, { fee: String(net.baseFee * 10), networkPassphrase: net.passphrase })
     .addOperation(Operation.createAccount({ destination, startingBalance: net.channelFunding }))
     .setTimeout(120)

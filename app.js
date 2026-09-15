@@ -16,6 +16,7 @@
   }
 
   function amount() { return Number($('amount').value) || 0; }
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
   function refresh() {
     var amt = amount();
@@ -54,7 +55,7 @@
           var floor = Number(r.xlm) / (1 + state.ceiling / 100);
           $('quote').innerHTML = '≈ <b>' + Number(r.xlm).toFixed(2) + ' XLM</b> now, floor <b>' + floor.toFixed(2) + ' XLM</b>';
         } else if (r.error) {
-          $('quote').textContent = r.error;
+          $('quote').textContent = String(r.error);
         } else {
           $('quote').textContent = 'no direct XLM/USDC market right now';
         }
@@ -80,7 +81,7 @@
         + (W.network === 'testnet' ? ' <a href="https://lab.stellar.org/account/fund?$=network$id=testnet" target="_blank" rel="noopener">Fund it with friendbot</a>.' : '');
       return;
     }
-    var html = 'Balance: <b>' + Number(a.usdc).toFixed(2) + ' USDC</b> · ' + Number(a.xlm).toFixed(2) + ' XLM';
+    var html = 'Balance: <b>' + (Number(a.usdc) || 0).toFixed(2) + ' USDC</b> · ' + (Number(a.xlm) || 0).toFixed(2) + ' XLM';
     if (!a.usdcTrustline) html += '<br><span class="warn">No USDC trustline.</span> <button class="mini" id="btn-trust">Add USDC trustline</button>';
     else if (W.network === 'testnet' && Number(a.usdc) < amount()) html += '<br><button class="mini" id="btn-usdc">Get 100 test USDC</button> <span class="dim">(buys on the testnet DEX with test XLM)</span>';
     box.innerHTML = html;
@@ -155,7 +156,9 @@
     if (!all.length) { box.hidden = true; return; }
     box.hidden = false;
     box.innerHTML = '<h2>Your plans on this device</h2>' + all.map(function (p) {
-      return '<a class="plan-link" href="plan.html?id=' + p.id + '"><span class="tag ' + p.network + '">' + p.network + '</span> ' + p.id.slice(0, 8) + '… <span class="dim">' + new Date(p.createdAt * 1000).toLocaleString() + '</span></a>';
+      if (!/^[a-f0-9]{32}$/.test(String(p.id))) return '';
+      var tag = p.network === 'mainnet' ? 'mainnet' : 'testnet';
+      return '<a class="plan-link" href="plan.html?id=' + p.id + '"><span class="tag ' + tag + '">' + tag + '</span> ' + p.id.slice(0, 8) + '… <span class="dim">' + esc(new Date(p.createdAt * 1000).toLocaleString()) + '</span></a>';
     }).join('');
   }
 

@@ -65,7 +65,7 @@ Every claim above is exercised against the real testnet in [`scripts/proof.mjs`]
 
 ```bash
 npm install
-cp .env.example .env            # DAMLA_TESTNET_TREASURY_SECRET=S... (any friendbot-funded testnet key)
+cp .env.example .env            # DAMLA_TESTNET_TREASURY_SECRET=S... (a friendbot-funded testnet key; it funds the channel accounts)
 npm run dev                     # API + trigger + site on http://localhost:8944
 npm test
 set -a; . ./.env; set +a; npm run proof   # ~6 min, writes docs/PROOF-testnet.md
@@ -75,7 +75,7 @@ API: `GET /api/health`, `GET /api/quote`, `GET /api/account`, `POST /api/plans` 
 
 ## Status
 
-Testnet: planner, signing, trigger, plan page, export, 1-minute demo cadence, test-USDC helper. Mainnet needs only a funded treasury for channel reserves (`DAMLA_MAINNET_TREASURY_SECRET`); the code path is identical.
+Testnet: planner, signing, trigger, plan page, export, 1-minute demo cadence, test-USDC helper. Channel accounts are funded by a per-network treasury (`DAMLA_TESTNET_TREASURY_SECRET`, friendbot-fed; `DAMLA_MAINNET_TREASURY_SECRET`, 2.5 XLM per plan, merged back when the plan ends or the draft is abandoned). Mainnet needs only that key; the code path is identical. Security controls and residual risks: [SECURITY.md](SECURITY.md).
 
 ## Open question
 

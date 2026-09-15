@@ -1,15 +1,22 @@
 import http from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { extname, join, normalize } from 'node:path'
-import { StrKey, TransactionBuilder, Operation, Asset } from '@stellar/stellar-sdk'
+import { Asset, Operation, StrKey, Transaction, TransactionBuilder } from '@stellar/stellar-sdk'
 import { LIMITS, NETWORKS, PERIODS, SERVER, enabledNetworks } from './config.js'
 import { PlanError, cancelPlan, createDraft, exportPlan, finalize, publicPlan } from './plan.js'
 import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, server as horizon, submitXdr, usdcAsset } from './horizon.js'
 
+const SECURITY_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'no-referrer',
+  'strict-transport-security': 'max-age=31536000',
+  'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+}
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.md': 'text/plain; charset=utf-8' }
 
 function json(res, status, body, origin) {
-  const h = { 'content-type': 'application/json', 'cache-control': 'no-store' }
+  const h = { 'content-type': 'application/json', 'cache-control': 'no-store', ...SECURITY_HEADERS }
   if (origin) Object.assign(h, cors(origin))
   res.writeHead(status, h)
   res.end(JSON.stringify(body))
@@ -37,7 +44,7 @@ async function readJson(req, limit = 256 * 1024) {
     const chunks = []
     req.on('data', (c) => {
       size += c.length
-      if (size > limit) { reject(new PlanError('body too large', 413)); req.destroy() }
+      if (size > limit) { chunks.length = 0; req.removeAllListeners('data'); req.resume(); reject(new PlanError('body too large', 413)) }
       else chunks.push(c)
     })
     req.on('end', () => {
@@ -58,6 +65,18 @@ function rateLimited(ip, limit = 120, windowMs = 60_000) {
   buckets.set(ip, b)
   if (buckets.size > 10000) buckets.clear()
   return b.n > limit
+}
+
+// draft creation funds a channel account: keep it scarce per IP and globally
+const DRAFT_LIMITS = { perIpPerHour: 6, globalPerHour: 60 }
+const draftLog = []
+function draftBudget(ip) {
+  const t = Date.now()
+  while (draftLog.length && draftLog[0].t < t - 3600_000) draftLog.shift()
+  if (draftLog.length >= DRAFT_LIMITS.globalPerHour) return 'the service is at its hourly plan-creation budget, try again later'
+  if (draftLog.filter((d) => d.ip === ip).length >= DRAFT_LIMITS.perIpPerHour) return 'too many plans created from this address, try again later'
+  draftLog.push({ t, ip })
+  return null
 }
 
 function netFrom(q) {
@@ -81,12 +100,12 @@ export function createServer(db, { webRoot } = {}) {
     if (url.pathname.startsWith('/api/')) {
       if (rateLimited(ip)) return json(res, 429, { error: 'slow down' }, origin)
       try {
-        return await api(req, res, url, origin)
+        return await api(req, res, url, origin, ip)
       } catch (err) {
         if (err instanceof PlanError) return json(res, err.status, { error: err.message }, origin)
-        const rc = resultCodes(err)
+        if (err?.response?.status === 429) return json(res, 503, { error: 'Horizon is rate-limiting this server, try again in a minute' }, origin)
         console.error('api error', req.method, url.pathname, err?.stack || err)
-        return json(res, 500, { error: 'internal error', detail: rc.tx || rc.message }, origin)
+        return json(res, 500, { error: 'internal error' }, origin)
       }
     }
 
@@ -94,7 +113,7 @@ export function createServer(db, { webRoot } = {}) {
     res.writeHead(404); res.end('not found')
   }
 
-  async function api(req, res, url, origin) {
+  async function api(req, res, url, origin, ip) {
     const p = url.pathname
     const q = url.searchParams
 
@@ -154,6 +173,11 @@ export function createServer(db, { webRoot } = {}) {
       const body = await readJson(req)
       const net = netFrom(new URLSearchParams({ network: body.network || '' }))
       if (typeof body.xdr !== 'string' || body.xdr.length > 20000) throw new PlanError('bad xdr')
+      let helperTx
+      try { helperTx = new Transaction(body.xdr, net.passphrase) } catch { throw new PlanError('bad xdr') }
+      const allowed = new Set(['changeTrust', 'pathPaymentStrictReceive'])
+      if (helperTx.operations.length < 1 || helperTx.operations.length > 2 || !helperTx.operations.every((o) => allowed.has(o.type) && !o.source))
+        throw new PlanError('this relay only submits the trustline and test-USDC helper transactions')
       try {
         const r = await submitXdr(net, body.xdr)
         return json(res, 200, { hash: r.hash, ledger: r.ledger }, origin)
@@ -166,6 +190,8 @@ export function createServer(db, { webRoot } = {}) {
     if (req.method === 'POST' && p === '/api/plans') {
       const body = await readJson(req)
       netFrom(new URLSearchParams({ network: body.network || '' }))
+      const busy = draftBudget(ip)
+      if (busy) throw new PlanError(busy, 429)
       const draft = await createDraft(db, body)
       return json(res, 201, draft, origin)
     }
@@ -178,8 +204,9 @@ export function createServer(db, { webRoot } = {}) {
         if (!plan) throw new PlanError('plan not found', 404)
         return json(res, 200, plan, origin)
       }
-      if (req.method === 'GET' && action === 'export') {
-        const ex = exportPlan(db, id)
+      if (req.method === 'POST' && action === 'export') {
+        const body = await readJson(req)
+        const ex = exportPlan(db, id, body.token)
         if (!ex) throw new PlanError('plan not found', 404)
         return json(res, 200, ex, origin)
       }
@@ -191,13 +218,6 @@ export function createServer(db, { webRoot } = {}) {
         const body = await readJson(req)
         return json(res, 200, cancelPlan(db, id, body.token), origin)
       }
-    }
-
-    if (req.method === 'GET' && p === '/api/plans') {
-      const user = q.get('user') || ''
-      if (!StrKey.isValidEd25519PublicKey(user)) throw new PlanError('bad user')
-      const rows = db.prepare("SELECT id FROM plans WHERE user = ? AND status != 'draft' ORDER BY created_at DESC LIMIT 50").all(user)
-      return json(res, 200, { plans: rows.map((r) => publicPlan(db, r.id)) }, origin)
     }
 
     throw new PlanError('not found', 404)
@@ -213,7 +233,7 @@ export function createServer(db, { webRoot } = {}) {
       const st = await stat(full)
       if (!st.isFile()) throw new Error('nf')
       const body = await readFile(full)
-      res.writeHead(200, { 'content-type': MIME[extname(full)] || 'application/octet-stream' })
+      res.writeHead(200, { 'content-type': MIME[extname(full)] || 'application/octet-stream', 'x-content-type-options': 'nosniff' })
       res.end(body)
     } catch {
       res.writeHead(404); res.end('not found')

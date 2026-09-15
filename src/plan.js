@@ -24,7 +24,7 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { Account, Asset, Keypair, Operation, StrKey, Transaction, TransactionBuilder, xdr } from '@stellar/stellar-sdk'
 import { LIMITS, NETWORKS, PERIODS } from './config.js'
-import { friendbot, fundFromTreasury, loadAccountOrNull, quoteStrictSend, server, treasuryPublic, usdcAsset } from './horizon.js'
+import { friendbot, fundFromTreasury, loadAccountOrNull, quoteStrictSend, resultCodes, server, treasuryPublic, usdcAsset } from './horizon.js'
 
 export class PlanError extends Error {
   constructor(message, status = 400) { super(message); this.status = status }
@@ -135,16 +135,19 @@ export async function createDraft(db, params, now = Math.floor(Date.now() / 1000
 
   const userAcct = await loadAccountOrNull(net, user)
   if (!userAcct) throw new PlanError('user account does not exist on this network')
-  const hasTrust = userAcct.balances.some((b) => b.asset_code === net.usdc.code && b.asset_issuer === net.usdc.issuer)
-  if (!hasTrust) throw new PlanError('user account has no USDC trustline')
+  const trust = userAcct.balances.find((b) => b.asset_code === net.usdc.code && b.asset_issuer === net.usdc.issuer)
+  if (!trust) throw new PlanError('user account has no USDC trustline')
+  if (Number(trust.balance) < Number(amount)) throw new PlanError(`user holds ${trust.balance} USDC, the first purchase needs ${amount}`)
+  const openDrafts = db.prepare("SELECT id FROM plans WHERE user = ? AND status = 'draft'").all(user)
+  for (const d of openDrafts) await abandonDraft(db, d.id, now) // one open draft per user; its channel is merged back
 
   const quote = await quoteStrictSend(net, amount)
   if (!quote) throw new PlanError('no direct XLM/USDC market for this amount right now', 503)
   const destMin = floorFromQuote(quote, ceiling)
 
   const channel = Keypair.random()
-  if (net.friendbot) await friendbot(net, channel.publicKey())
-  else if (net.treasurySecret) await fundFromTreasury(net, channel.publicKey())
+  if (net.treasurySecret) await fundFromTreasury(net, channel.publicKey())
+  else if (net.friendbot) await friendbot(net, channel.publicKey())
   else throw new PlanError('network not enabled on this server', 503)
   const chAcct = await server(net).loadAccount(channel.publicKey())
   const startSeq = chAcct.sequenceNumber()
@@ -181,6 +184,38 @@ export async function createDraft(db, params, now = Math.floor(Date.now() / 1000
     quoteXlm: quote, destMin, t0, startSeq,
     txs: built.txs.map((t) => ({ idx: t.idx, hash: t.hash, seq: t.seq, minTime: t.minTime, maxTime: t.maxTime, minSeqAge: t.minSeqAge, xdr: t.tx.toXDR() })),
   }
+}
+
+/**
+ * Abandon a draft: merge its channel back to the treasury while we still hold
+ * the key (nothing was activated, so no user signature exists on it), then
+ * forget the key.
+ */
+export async function abandonDraft(db, planId, now = Math.floor(Date.now() / 1000)) {
+  const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(planId)
+  if (!plan || plan.status !== 'draft') return
+  const net = NETWORKS[plan.network]
+  const treasury = treasuryPublic(net)
+  if (plan.channel_secret && treasury) {
+    try {
+      const kp = Keypair.fromSecret(plan.channel_secret)
+      const acct = await server(net).loadAccount(kp.publicKey())
+      const tx = new TransactionBuilder(acct, { fee: String(net.baseFee * 10), networkPassphrase: net.passphrase })
+        .addOperation(Operation.accountMerge({ destination: treasury }))
+        .setTimeout(120).build()
+      tx.sign(kp)
+      await server(net).submitTransaction(tx)
+    } catch (err) {
+      // best effort: the pre-signed merge still recovers the reserve after the plan's last window
+      console.error(`[${planId.slice(0, 8)}] abandon merge failed: ${resultCodes(err).tx || err.message}`)
+    }
+  }
+  db.exec('BEGIN')
+  try {
+    db.prepare("UPDATE plans SET status = 'abandoned', channel_secret = NULL, ended_at = ? WHERE id = ?").run(now, planId)
+    db.prepare("UPDATE txs SET status = 'cancelled' WHERE plan_id = ? AND kind = 'buy'").run(planId)
+    db.exec('COMMIT')
+  } catch (e) { db.exec('ROLLBACK'); throw e }
 }
 
 /**
@@ -256,9 +291,10 @@ export function publicPlan(db, planId) {
   }
 }
 
-export function exportPlan(db, planId) {
+export function exportPlan(db, planId, token) {
   const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(planId)
   if (!plan || plan.status === 'draft') return null
+  if (typeof token !== 'string' || hashToken(token) !== plan.cancel_hash) throw new PlanError('bad plan token', 403)
   const txs = db.prepare("SELECT * FROM txs WHERE plan_id = ? AND kind = 'buy' ORDER BY idx").all(planId)
   const net = NETWORKS[plan.network]
   return {
