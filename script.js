@@ -60,6 +60,7 @@
       walletBtn.textContent = shortAddr(addr);
       walletBtn.classList.add('connected');
       walletBtn.title = addr;
+      walletBtn.disabled = true;
       document.dispatchEvent(new CustomEvent('damla:connected', { detail: { address: addr } }));
       return addr;
     } catch (e) { return null; }
@@ -77,6 +78,7 @@
         walletBtn.textContent = shortAddr(r.address);
         walletBtn.classList.add('connected');
         walletBtn.title = r.address;
+        walletBtn.disabled = true;
         document.dispatchEvent(new CustomEvent('damla:connected', { detail: { address: r.address } }));
       }
     }).catch(function () {});

@@ -4,111 +4,90 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Damla</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 28'%3E%3Cpath d='M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z' fill='%234db8ff'/%3E%3C/svg%3E">
+<meta name="description" content="Damla: non-custodial recurring XLM purchases on Stellar. Sign once, buy on a schedule, no smart contract.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 28'%3E%3Cpath d='M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z' fill='%231e88e5'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
-<script src="vendor/freighter-api.min.js"></script>
-<script src="config.js"></script>
 </head>
 <body>
 <header>
   <div class="wrap header-in">
-    <a class="brand" href="index.html">
-      <svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#4db8ff"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#c8ecff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
-      Damla
-    </a>
+    <a class="brand" href="index.html"><svg width="22" height="28" viewBox="0 0 22 28"><path d="M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z" fill="#1e88e5"/><path d="M7.2 18.2 a4.5 4.5 0 0 0 3 4.6" stroke="#bfe0fb" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg> Damla</a>
     <nav>
-      <a href="index.html" class="here">App</a>
+      <a href="index.html" class="here hide-sm">Home</a>
+      <a href="app.html">App</a>
       <a href="docs.html">Docs</a>
       <a href="faq.html">FAQ</a>
     </nav>
-    <div class="hdr-right">
-      <div class="net-switch" id="net-switch">
-        <button data-net="testnet" class="on">Testnet</button>
-        <button data-net="mainnet">Mainnet</button>
-      </div>
-      <button class="wallet-btn" id="wallet-connect">Connect Wallet</button>
-    </div>
+    <div class="hdr-right"><a class="btn" href="app.html">Open app</a></div>
   </div>
 </header>
 
 <main>
-  <div class="wrap">
-    <section class="hero">
-      <div>
-        <h1>Buy XLM on your schedule.<br><span class="accent">Sign only once.</span></h1>
-        <p class="sub">Non-custodial recurring purchases on Stellar, daily, weekly or monthly. Your funds stay in your wallet; the protocol enforces the schedule. Drop by drop.</p>
-        <ul class="points">
-          <li><b>Non-custodial.</b>&nbsp;USDC never leaves your wallet until each swap settles.</li>
-          <li><b>No smart contract.</b>&nbsp;Nothing to deploy, nothing to audit, nothing to exploit.</li>
-          <li><b>Protocol-enforced timing.</b>&nbsp;Purchases can't run early: Stellar validators reject them.</li>
-          <li><b>Not even we can change it.</b>&nbsp;Amount, asset, floor and dates are inside your signature.</li>
-          <li><b>Cancel anytime.</b>&nbsp;Move your USDC and the plan simply stops.</li>
-        </ul>
+  <section class="hero">
+    <div class="wrap">
+      <h1>Buy XLM on a schedule.<br><span class="accent">Sign once, then forget it.</span></h1>
+      <p class="sub">Damla turns your USDC into XLM every day, week or month, straight from your own wallet. No deposit, no smart contract, nothing to trust but the Stellar network.</p>
+      <div class="cta-row">
+        <a class="btn big" href="app.html">Start a plan</a>
+        <a class="btn big ghost" href="#how">How it works</a>
       </div>
+      <p class="fine">Works with Freighter. Free, open source, currently on Stellar testnet.</p>
+    </div>
+  </section>
 
-      <div class="card">
-        <label>Amount per purchase</label>
-        <div class="amount-row">
-          <input id="amount" type="number" min="1" value="25">
-          <span class="unit">USDC</span>
-        </div>
-        <div class="quote" id="quote">&nbsp;</div>
-
-        <label>Frequency</label>
-        <div class="opts" id="freq">
-          <div class="opt" data-f="minute" hidden>Minute</div>
-          <div class="opt" data-f="daily">Daily</div>
-          <div class="opt on" data-f="weekly">Weekly</div>
-          <div class="opt" data-f="monthly">Monthly</div>
-        </div>
-
-        <label>Number of purchases</label>
-        <div class="opts" id="count">
-          <div class="opt on" data-c="4">4</div>
-          <div class="opt" data-c="8">8</div>
-          <div class="opt" data-c="12">12</div>
-        </div>
-
-        <label>Skip a purchase if XLM costs more than … above today's price</label>
-        <div class="opts" id="ceiling">
-          <div class="opt" data-s="10">+10%</div>
-          <div class="opt on" data-s="25">+25%</div>
-          <div class="opt" data-s="50">+50%</div>
-        </div>
-
-        <div class="summary">
-          <div class="row"><span>Total to commit</span><b id="total">100 USDC</b></div>
-          <div class="row"><span>Executes</span><b id="cadence">every week, on-chain</b></div>
-          <div class="row"><span>Custody</span><b>your wallet, always</b></div>
-        </div>
-
-        <div class="acct" id="acct"></div>
-        <button class="cta" id="sign">Sign plan</button>
-        <div class="wallet" id="wallet-note"></div>
-      </div>
-    </section>
-
-    <section class="my-plans" id="my-plans" hidden></section>
-
-    <section class="how">
-      <h2>How it works</h2>
+  <section class="section soft" id="how">
+    <div class="wrap">
+      <h2>Three steps, one sitting</h2>
+      <p class="lead">You decide the amount and the rhythm. The protocol keeps the calendar.</p>
       <div class="steps">
-        <div class="step"><div class="n">1</div><p><b>Sign in one sitting.</b> You pre-sign one transaction per purchase. Amount, asset, destination, floor and time window are locked inside each signature.</p></div>
-        <div class="step"><div class="n">2</div><p><b>The protocol keeps time.</b> Each transaction is invalid outside its window (time bounds) and until a full period has passed since the previous one (<code>minSeqAge</code>). Nobody can run it early, not even us.</p></div>
-        <div class="step"><div class="n">3</div><p><b>XLM lands in your wallet.</b> On each date a path payment swaps your USDC to XLM on Stellar's DEX. Miss one? <code>minSeqNum</code> keeps the rest of the chain valid.</p></div>
+        <div class="step"><div class="n">1</div><h3>Choose your plan</h3><p>For example: 25 USDC worth of XLM every week, 12 times. Connect Freighter and sign each purchase once. Amount, dates and price floor are locked inside your signature.</p></div>
+        <div class="step"><div class="n">2</div><h3>Stellar keeps time</h3><p>Every purchase is invalid until its date. Not by our promise, by consensus: validators reject it early. Nobody can move it up, change it, or touch anything else in your wallet.</p></div>
+        <div class="step"><div class="n">3</div><h3>XLM lands in your wallet</h3><p>On each date the swap runs on Stellar's own exchange. USDC leaves your wallet only at that moment, XLM arrives in the same wallet. Miss a week? The plan continues.</p></div>
       </div>
-    </section>
-  </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>Why there is no contract</h2>
+      <p class="lead">Most "automation" asks you to hand over funds or permissions. Damla asks for neither.</p>
+      <ul class="trust">
+        <li><span><b>Your USDC stays yours.</b> There is no vault. Nothing is deposited, so there is nothing to withdraw or lose.</span></li>
+        <li><span><b>Nothing to audit, nothing to exploit.</b> The rules are Stellar's own transaction rules, not code we wrote.</span></li>
+        <li><span><b>Even we cannot change it.</b> A hacked service can at most fail to submit. Then nothing happens.</span></li>
+        <li><span><b>Cancel by moving your USDC.</b> Or press stop on your plan page. No lock-up, no penalty.</span></li>
+      </ul>
+      <p class="center" style="margin-top:28px"><a href="docs.html">Read the full design and security model &rarr;</a></p>
+    </div>
+  </section>
+
+  <section class="section soft">
+    <div class="wrap">
+      <h2>Questions</h2>
+      <div class="faq-mini">
+        <details><summary>Do you hold my money?</summary><p>No. Your USDC sits in your own wallet until each scheduled swap settles. The XLM you buy lands in the same wallet.</p></details>
+        <details><summary>What if the price spikes on a purchase day?</summary><p>You pick a ceiling when you sign (up to +10%, +25% or +50% above today's price). Above it, the purchase waits and is skipped if the price does not come back. A falling price never blocks a purchase.</p></details>
+        <details><summary>What does it cost?</summary><p>Nothing. Stellar fees are fractions of a cent and the service pays them. The swap runs at market price, never below your floor.</p></details>
+        <details><summary>What if Damla disappears?</summary><p>Export your signed plan from its page. Anyone can submit those transactions inside their windows, nobody can alter them. Your plan does not depend on us.</p></details>
+      </div>
+      <p class="center" style="margin-top:28px"><a href="faq.html">All questions &rarr;</a></p>
+    </div>
+  </section>
+
+  <section class="section center">
+    <div class="wrap">
+      <h2>Drop by drop.</h2>
+      <p class="lead"><i>Damlaya damlaya g&ouml;l olur</i>: drop by drop, a lake is formed.</p>
+      <a class="btn big" href="app.html">Start a plan</a>
+    </div>
+  </section>
 </main>
 
 <footer>
   <div class="wrap footer-in">
-    <span>Damla</span>
-    <a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a>
+    <span>Damla · drop by drop</span>
+    <span><a href="docs.html">Docs</a><a href="faq.html">FAQ</a><a href="https://github.com/sud3naz/Damla" target="_blank" rel="noopener">GitHub</a></span>
   </div>
 </footer>
-
-<script src="script.js"></script>
-<script src="app.js"></script>
 </body>
 </html>

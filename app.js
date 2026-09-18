@@ -5,7 +5,7 @@
   var state = { count: 4, freq: 'weekly', ceiling: 25, account: null, busy: false, quote: null };
   var $ = function (id) { return document.getElementById(id); };
 
-  var CADENCE = { minute: 'every minute (testnet demo)', daily: 'every day, on-chain', weekly: 'every week, on-chain', monthly: 'every 30 days, on-chain' };
+  var CADENCE = { minute: 'every minute (testnet demo)', daily: 'every day', weekly: 'every week', monthly: 'every 30 days' };
   var PLANS_KEY = 'damla-plans';
 
   function savedPlans() { try { return JSON.parse(localStorage.getItem(PLANS_KEY) || '[]'); } catch (e) { return []; } }
@@ -53,7 +53,7 @@
         state.quote = r.xlm;
         if (r.xlm) {
           var floor = Number(r.xlm) / (1 + state.ceiling / 100);
-          $('quote').innerHTML = '≈ <b>' + Number(r.xlm).toFixed(2) + ' XLM</b> now, floor <b>' + floor.toFixed(2) + ' XLM</b>';
+          $('quote').innerHTML = 'Buys about <b>' + Number(r.xlm).toFixed(2) + ' XLM</b> at today\'s price · at least <b>' + floor.toFixed(2) + ' XLM</b> guaranteed per purchase';
         } else if (r.error) {
           $('quote').textContent = String(r.error);
         } else {
@@ -74,7 +74,9 @@
   function renderAccount() {
     var box = $('acct');
     var a = state.account;
-    if (!W.address) { box.innerHTML = ''; return; }
+    var who = $('who');
+    if (!W.address) { box.innerHTML = ''; if (who) who.textContent = 'Connect your Freighter wallet to begin.'; return; }
+    if (who) who.innerHTML = 'Connected<b>' + esc(W.address) + '</b>';
     if (!a || a.error) { box.innerHTML = '<span class="warn">Could not read your account from Horizon.</span>'; return; }
     if (!a.exists) {
       box.innerHTML = '<span class="warn">This account does not exist on ' + W.network + ' yet.</span>'
@@ -122,7 +124,7 @@
 
   async function signPlan() {
     if (state.busy) return;
-    if (!W.address) { await W.connect(); if (!W.address) { setNote('Connect Freighter first (top right).', true); return; } }
+    if (!W.address) { await W.connect(); if (!W.address) { setNote('Connect your Freighter wallet first.', true); return; } }
     var btn = $('sign');
     state.busy = true; btn.disabled = true;
     try {
@@ -134,7 +136,7 @@
       var signed = [];
       for (var i = 0; i < draft.txs.length; i++) {
         var t = draft.txs[i];
-        setNote('Sign purchase ' + (i + 1) + ' of ' + draft.txs.length + ' in Freighter…');
+        setNote('Freighter: sign purchase ' + (i + 1) + ' of ' + draft.txs.length + '. Same amount each time, only the date differs.');
         var s = await W.api.signTransaction(t.xdr, { networkPassphrase: W.passphrase(draft.network), address: W.address });
         if (s.error) throw new Error('Purchase ' + (i + 1) + ': ' + (s.error.message || 'signing declined'));
         signed.push({ idx: t.idx, xdr: s.signedTxXdr });
@@ -155,7 +157,7 @@
     var all = savedPlans().filter(function (p) { return !W.address || p.user === W.address; });
     if (!all.length) { box.hidden = true; return; }
     box.hidden = false;
-    box.innerHTML = '<h2>Your plans on this device</h2>' + all.map(function (p) {
+    box.innerHTML = '<h2>Your plans</h2>' + all.map(function (p) {
       if (!/^[a-f0-9]{32}$/.test(String(p.id))) return '';
       var tag = p.network === 'mainnet' ? 'mainnet' : 'testnet';
       return '<a class="plan-link" href="plan.html?id=' + p.id + '"><span class="tag ' + tag + '">' + tag + '</span> ' + p.id.slice(0, 8) + '… <span class="dim">' + esc(new Date(p.createdAt * 1000).toLocaleString()) + '</span></a>';
@@ -164,7 +166,7 @@
 
   bindOpts('freq', function (el) { state.freq = el.dataset.f; refresh(); });
   bindOpts('count', function (el) { state.count = Number(el.dataset.c); refresh(); });
-  bindOpts('ceiling', function (el) { state.ceiling = Number(el.dataset.s); refresh(); });
+  bindOpts('ceiling', function (el) { state.ceiling = Number(el.dataset.s); var l = $('ceil-label'); if (l) l.textContent = state.ceiling + '%'; refresh(); });
   $('amount').addEventListener('input', function () { refresh(); renderAccount(); });
   $('sign').addEventListener('click', signPlan);
   document.addEventListener('damla:connected', function () { setNote(''); loadAccount(); renderMyPlans(); });
