@@ -28,7 +28,7 @@ test('cors: unknown origins get no allow header, known ones do', async () => {
 })
 
 test('plan creation validates before touching the network', async () => {
-  const r = await fetch(`${base}/api/plans`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ network: 'testnet', user: 'nope', amount: '1', period: 'weekly', count: 4, ceiling: 25 }) })
+  const r = await fetch(`${base}/api/plans`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ network: 'testnet', user: 'nope', amount: '1', every: 1, unit: 'weeks', count: 4, ceiling: 25 }) })
   assert.equal(r.status, 400)
   assert.match((await r.json()).error, /invalid user/)
 })

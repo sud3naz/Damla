@@ -26,57 +26,86 @@
 
 <main>
   <div class="wrap">
-    <div class="app">
-      <h1>Start a plan</h1>
-      <p class="lead">Three choices, then sign. Your USDC stays in your wallet until each purchase.</p>
-
-      <div class="card">
-        <div class="wallet-row">
-          <div class="who" id="who">Connect your Freighter wallet to begin.</div>
-          <button class="wallet-btn" id="wallet-connect">Connect wallet</button>
+    <div class="app2">
+      <div class="app-head">
+        <div>
+          <h1>Start a plan</h1>
+          <p class="lead">Pick an amount and a rhythm, sign in Freighter, done. Your USDC stays in your wallet until each purchase.</p>
         </div>
+        <ol class="stepper" id="stepper">
+          <li class="on"><span>1</span>Connect</li>
+          <li><span>2</span>Choose</li>
+          <li><span>3</span>Sign</li>
+          <li><span>4</span>Runs by itself</li>
+        </ol>
+      </div>
 
-        <label for="amount">How much per purchase?</label>
-        <div class="amount-row">
-          <input id="amount" type="number" min="1" step="1" value="25" inputmode="decimal">
-          <span class="unit">USDC</span>
-        </div>
-        <div class="quote" id="quote">&nbsp;</div>
+      <div class="banner" id="net-banner" hidden></div>
 
-        <label>How often?</label>
-        <div class="opts" id="freq">
-          <div class="opt" data-f="minute" hidden>Minute</div>
-          <div class="opt" data-f="daily">Daily</div>
-          <div class="opt on" data-f="weekly">Weekly</div>
-          <div class="opt" data-f="monthly">Monthly</div>
-        </div>
-
-        <label>How many purchases?</label>
-        <div class="opts" id="count">
-          <div class="opt on" data-c="4">4</div>
-          <div class="opt" data-c="8">8</div>
-          <div class="opt" data-c="12">12</div>
-        </div>
-
-        <details class="adv">
-          <summary>Price ceiling: skip a purchase if XLM costs more than <b id="ceil-label">25%</b> above today</summary>
-          <div class="opts" id="ceiling" style="margin-top:10px">
-            <div class="opt" data-s="10">+10%</div>
-            <div class="opt on" data-s="25">+25%</div>
-            <div class="opt" data-s="50">+50%</div>
+      <div class="cols">
+        <div class="card">
+          <div class="wallet-row">
+            <div class="who" id="who">Connect your Freighter wallet to begin.</div>
+            <button class="wallet-btn" id="wallet-connect">Connect wallet</button>
           </div>
-          <p class="hint">A skipped purchase is not lost money: nothing leaves your wallet. A falling price never blocks a purchase.</p>
-        </details>
 
-        <div class="summary">
-          <div class="row"><span>Rhythm</span><b id="cadence">every week</b></div>
-          <div class="row"><span>Total you commit</span><b id="total">100 USDC</b></div>
-          <div class="row"><span>Custody</span><b>your wallet, always</b></div>
+          <label for="amount">How much per purchase?</label>
+          <div class="amount-row">
+            <input id="amount" type="number" min="1" step="1" value="25" inputmode="decimal">
+            <span class="unit">USDC</span>
+          </div>
+          <div class="quote" id="quote">&nbsp;</div>
+
+          <label>How often?</label>
+          <div class="every-row">
+            <span class="every-word">Every</span>
+            <input id="every" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric">
+            <select id="unit">
+              <option value="minutes" hidden>minutes</option>
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+              <option value="weeks" selected>weeks</option>
+            </select>
+          </div>
+          <div class="hint" id="every-hint"></div>
+
+          <label for="count">How many purchases? <small>(2 to 52)</small></label>
+          <div class="amount-row">
+            <input id="count" type="number" min="2" max="52" step="1" value="12" inputmode="numeric">
+            <span class="unit">purchases</span>
+          </div>
+
+          <label for="start">First purchase <small>(leave empty for right after signing)</small></label>
+          <input id="start" type="datetime-local" class="date">
+
+          <details class="adv">
+            <summary>Price ceiling: skip a purchase if XLM costs more than <b id="ceil-label">25%</b> above today</summary>
+            <div class="opts" id="ceiling" style="margin-top:10px">
+              <div class="opt" data-s="10">+10%</div>
+              <div class="opt on" data-s="25">+25%</div>
+              <div class="opt" data-s="50">+50%</div>
+            </div>
+            <p class="hint">A skipped purchase is not lost money: nothing leaves your wallet. A falling price never blocks a purchase.</p>
+          </details>
+
+          <div class="summary">
+            <div class="row"><span>Rhythm</span><b id="cadence">every week</b></div>
+            <div class="row"><span>Total you commit</span><b id="total">100 USDC</b></div>
+            <div class="row"><span>Custody</span><b>your wallet, always</b></div>
+          </div>
+
+          <div class="acct" id="acct"></div>
+          <button class="btn full big" id="sign">Sign plan</button>
+          <div class="wallet" id="wallet-note"></div>
         </div>
 
-        <div class="acct" id="acct"></div>
-        <button class="btn full big" id="sign">Sign plan</button>
-        <div class="wallet" id="wallet-note"></div>
+        <aside class="side">
+          <h3>What will happen</h3>
+          <ol class="preview" id="preview"></ol>
+          <h3>Purchase dates</h3>
+          <ol class="schedule" id="schedule"></ol>
+          <p class="side-note">Each date is a window: the purchase can run any time within it, never before it. Stellar validators enforce this, not our server.</p>
+        </aside>
       </div>
 
       <section class="my-plans" id="my-plans" hidden></section>

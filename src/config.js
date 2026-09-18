@@ -33,19 +33,22 @@ export const NETWORKS = {
   },
 }
 
-// period lengths in seconds. "minute" exists for testnet demos only.
-export const PERIODS = {
-  minute: { seconds: 60, label: 'every minute (demo)', testnetOnly: true },
-  daily: { seconds: 86400, label: 'every day' },
-  weekly: { seconds: 7 * 86400, label: 'every week' },
-  monthly: { seconds: 30 * 86400, label: 'every 30 days' },
+// frequency units the user can combine with a number ("every 3 days")
+export const UNITS = {
+  minutes: { seconds: 60, testnetOnly: true },
+  hours: { seconds: 3600 },
+  days: { seconds: 86400 },
+  weeks: { seconds: 7 * 86400 },
 }
 
 export const LIMITS = {
   minAmount: 1,
   maxAmount: 10000,
   minCount: 2,
-  maxCount: 24,
+  maxCount: 52,
+  minPeriodSeconds: { testnet: 60, mainnet: 3600 },
+  maxPeriodSeconds: 90 * 86400,
+  maxStartDelaySeconds: 60 * 86400, // first purchase at most 60 days out
   ceilings: [10, 25, 50], // percent above the price at signing after which a purchase is skipped
   draftTtlSeconds: 30 * 60,
   signingAllowanceSeconds: 60, // first window opens this long after the plan is built

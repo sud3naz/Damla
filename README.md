@@ -6,7 +6,7 @@
 
 > *"Damlaya damlaya göl olur."* — Turkish proverb: drop by drop, a lake is formed.
 
-Damla lets a user say **"buy 25 USDC worth of XLM every week"** and walk away. The user signs the plan in one sitting; after that, USDC→XLM purchases execute automatically on Stellar's DEX. Funds never leave the user's account until each purchase settles, and no smart contract ever holds custody or authority.
+Damla lets a user say **"buy 25 USDC worth of XLM every 3 days, 20 times, starting Monday"** and walk away. The user signs the plan in one sitting; after that, USDC→XLM purchases execute automatically on Stellar's DEX. Funds never leave the user's account until each purchase settles, and no smart contract ever holds custody or authority.
 
 ## Why
 
@@ -71,7 +71,7 @@ npm test
 set -a; . ./.env; set +a; npm run proof   # ~6 min, writes docs/PROOF-testnet.md
 ```
 
-API: `GET /api/health`, `GET /api/quote`, `GET /api/account`, `POST /api/plans` (draft), `POST /api/plans/:id/finalize`, `GET /api/plans/:id`, `GET /api/plans/:id/export`, `POST /api/plans/:id/cancel`, `GET /api/helper/trustline`, `GET /api/helper/test-usdc`, `POST /api/helper/submit`.
+API: `GET /api/health`, `GET /api/quote`, `GET /api/account`, `POST /api/plans` (draft: `{network, user, amount, every, unit, count, ceiling, start?}`), `POST /api/plans/:id/finalize`, `GET /api/plans/:id`, `GET /api/plans/:id/export`, `POST /api/plans/:id/cancel`, `GET /api/helper/trustline`, `GET /api/helper/test-usdc`, `POST /api/helper/submit`.
 
 ## Status
 

@@ -55,11 +55,11 @@ test('a re-signed envelope keeps the hash; signatures verify against both keys',
 })
 
 test('validateParams rejects bad input', () => {
-  const ok = { network: 'testnet', user: user.publicKey(), amount: '25', period: 'weekly', count: 4, ceiling: 25 }
+  const ok = { network: 'testnet', user: user.publicKey(), amount: '25', every: 1, unit: 'weeks', count: 4, ceiling: 25 }
   assert.equal(validateParams(ok).count, 4)
   assert.throws(() => validateParams({ ...ok, network: 'nope' }), /unknown network/)
   assert.throws(() => validateParams({ ...ok, user: 'GABC' }), /invalid user/)
-  assert.throws(() => validateParams({ ...ok, period: 'minute', network: 'mainnet' }), /testnet-only/)
+  assert.throws(() => validateParams({ ...ok, every: 1, unit: 'minutes', network: 'mainnet' }), /testnet-only/)
   assert.throws(() => validateParams({ ...ok, amount: '0.5' }), /amount/)
   assert.throws(() => validateParams({ ...ok, amount: '1.12345678' }), /decimals/)
   assert.throws(() => validateParams({ ...ok, count: 1 }), /count/)

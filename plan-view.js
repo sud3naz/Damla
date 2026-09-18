@@ -36,7 +36,7 @@
     var netTag = p.network === 'mainnet' ? 'mainnet' : 'testnet';
     var head = '<div class="plan-head">'
       + '<div><span class="tag ' + netTag + '">' + esc(p.network) + '</span> <span class="tag st-' + esc(p.status) + '">' + esc(p.status) + '</span></div>'
-      + '<h1>' + esc(p.amount) + ' USDC → XLM, ' + esc({ minute: 'every minute', daily: 'daily', weekly: 'weekly', monthly: 'every 30 days' }[p.period] || p.period) + ' × ' + esc(p.count) + '</h1>'
+      + '<h1>' + esc(p.amount) + ' USDC → XLM, ' + esc(p.periodLabel || p.period) + ' × ' + esc(p.count) + '</h1>'
       + '<div class="kv">'
       + '<div><span>Bought</span><b>' + done + ' / ' + esc(p.count) + '</b></div>'
       + '<div><span>XLM received</span><b>' + totalXlm.toFixed(4) + '</b></div>'

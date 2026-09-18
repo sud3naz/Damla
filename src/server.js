@@ -2,7 +2,7 @@ import http from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { extname, join, normalize } from 'node:path'
 import { Asset, Operation, StrKey, Transaction, TransactionBuilder } from '@stellar/stellar-sdk'
-import { LIMITS, NETWORKS, PERIODS, SERVER, enabledNetworks } from './config.js'
+import { LIMITS, NETWORKS, UNITS, SERVER, enabledNetworks } from './config.js'
 import { PlanError, cancelPlan, createDraft, exportPlan, finalize, publicPlan } from './plan.js'
 import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, server as horizon, submitXdr, usdcAsset } from './horizon.js'
 
@@ -122,7 +122,7 @@ export function createServer(db, { webRoot } = {}) {
     if (req.method === 'GET' && p === '/api/config') {
       return json(res, 200, {
         networks: enabledNetworks(),
-        periods: Object.fromEntries(Object.entries(PERIODS).map(([k, v]) => [k, v])),
+        units: UNITS,
         limits: LIMITS,
         maxAmount: Object.fromEntries(Object.entries(NETWORKS).map(([k, v]) => [k, Math.min(LIMITS.maxAmount, v.maxAmount || LIMITS.maxAmount)])),
         usdc: Object.fromEntries(Object.entries(NETWORKS).map(([k, v]) => [k, v.usdc])),

@@ -26,7 +26,7 @@ console.log('user', user.publicKey(), 'funded with 30 test USDC')
 
 console.log(await j('/api/health'))
 console.log(await j(`/api/account?network=testnet&address=${user.publicKey()}`))
-const draft = await j('/api/plans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ network: 'testnet', user: user.publicKey(), amount: '5', period: 'minute', count: 2, ceiling: 25 }) })
+const draft = await j('/api/plans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ network: 'testnet', user: user.publicKey(), amount: '5', every: 1, unit: 'minutes', count: 2, ceiling: 25 }) })
 console.log('draft', draft.id, 'channel', draft.channel, 'quote', draft.quoteXlm, 'floor', draft.destMin)
 const signed = draft.txs.map((t) => { const tx = new Transaction(t.xdr, net.passphrase); tx.sign(user); return { idx: t.idx, xdr: tx.toXDR() } })
 const plan = await j(`/api/plans/${draft.id}/finalize`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signed }) })

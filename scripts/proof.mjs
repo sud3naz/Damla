@@ -40,7 +40,7 @@ await friendbot(net, user.publicKey())
   say(`Setup: USDC trustline + bought 100 test USDC on the testnet DEX: [${r.hash}](${link(r.hash)})`)
 }
 
-const draft = await createDraft(db, { network: 'testnet', user: user.publicKey(), amount: '10', period: 'minute', count: 4, ceiling: 50 })
+const draft = await createDraft(db, { network: 'testnet', user: user.publicKey(), amount: '10', every: 1, unit: 'minutes', count: 4, ceiling: 50 })
 say(`\n## Plan\n\n- 10 USDC -> XLM, every minute, 4 purchases, ceiling +50%\n- quote at signing: ${draft.quoteXlm} XLM for 10 USDC, floor (destMin): ${draft.destMin} XLM\n- channel account: \`${draft.channel}\` (fresh, funded by friendbot), start sequence ${draft.startSeq}\n- t0 = ${draft.t0} (${new Date(draft.t0 * 1000).toISOString()})\n`)
 say('| # | seq | minSeqNum | minSeqAge | window (unix) | hash |\n|---|---|---|---|---|---|')
 for (const t of draft.txs) say(`| ${t.idx} | ${t.seq} | ${draft.startSeq} | ${t.minSeqAge}s | ${t.minTime} .. ${t.maxTime} | \`${t.hash}\` |`)

@@ -23,20 +23,31 @@
  */
 import { randomBytes, createHash } from 'node:crypto'
 import { Account, Asset, Keypair, Operation, StrKey, Transaction, TransactionBuilder, xdr } from '@stellar/stellar-sdk'
-import { LIMITS, NETWORKS, PERIODS } from './config.js'
+import { LIMITS, NETWORKS, UNITS } from './config.js'
 import { friendbot, fundFromTreasury, loadAccountOrNull, quoteStrictSend, resultCodes, server, treasuryPublic, usdcAsset } from './horizon.js'
 
 export class PlanError extends Error {
   constructor(message, status = 400) { super(message); this.status = status }
 }
 
-export function validateParams(p) {
+export function periodLabel(every, unit) {
+  const word = every === 1 ? unit.replace(/s$/, '') : unit
+  return every === 1 ? `every ${word}` : `every ${every} ${word}`
+}
+
+export function validateParams(p, now = Math.floor(Date.now() / 1000)) {
   const net = NETWORKS[p.network]
   if (!net) throw new PlanError('unknown network')
   if (!StrKey.isValidEd25519PublicKey(p.user || '')) throw new PlanError('invalid user address')
-  const period = PERIODS[p.period]
-  if (!period) throw new PlanError('unknown period')
-  if (period.testnetOnly && net.key !== 'testnet') throw new PlanError('that period is testnet-only')
+  const unit = UNITS[p.unit]
+  if (!unit) throw new PlanError('unit must be one of minutes, hours, days, weeks')
+  if (unit.testnetOnly && net.key !== 'testnet') throw new PlanError('minute cadence is testnet-only')
+  const every = Number(p.every)
+  if (!Number.isInteger(every) || every < 1 || every > 1000) throw new PlanError('"every" must be a whole number between 1 and 1000')
+  const periodSeconds = every * unit.seconds
+  const minP = LIMITS.minPeriodSeconds[net.key]
+  if (periodSeconds < minP) throw new PlanError(`the shortest cadence on ${net.key} is every ${minP >= 3600 ? minP / 3600 + ' hour' : minP / 60 + ' minute'}`)
+  if (periodSeconds > LIMITS.maxPeriodSeconds) throw new PlanError('the longest cadence is every 90 days')
   const amount = Number(p.amount)
   const maxAmount = Math.min(LIMITS.maxAmount, net.maxAmount || LIMITS.maxAmount)
   if (!Number.isFinite(amount) || amount < LIMITS.minAmount || amount > maxAmount)
@@ -47,7 +58,14 @@ export function validateParams(p) {
     throw new PlanError(`count must be between ${LIMITS.minCount} and ${LIMITS.maxCount}`)
   const ceiling = Number(p.ceiling)
   if (!LIMITS.ceilings.includes(ceiling)) throw new PlanError(`ceiling must be one of ${LIMITS.ceilings.join(', ')}`)
-  return { net, period, amount: String(p.amount), count, ceiling }
+  let t0 = now + LIMITS.signingAllowanceSeconds
+  if (p.start != null && p.start !== '') {
+    const start = Number(p.start)
+    if (!Number.isInteger(start)) throw new PlanError('start must be a unix timestamp')
+    if (start > now + LIMITS.maxStartDelaySeconds) throw new PlanError('the first purchase can be at most 60 days out')
+    t0 = Math.max(t0, start)
+  }
+  return { net, every, unit: p.unit, periodSeconds, label: periodLabel(every, p.unit), amount: String(p.amount), count, ceiling, t0 }
 }
 
 /** XLM floor: the quote at signing, divided by (1 + ceiling%). 7 decimals, rounded down. */
@@ -131,7 +149,7 @@ export function hashToken(t) { return createHash('sha256').update(t).digest('hex
  * channel-sign every transaction, persist. Returns what the browser needs.
  */
 export async function createDraft(db, params, now = Math.floor(Date.now() / 1000)) {
-  const { net, period, amount, count, ceiling } = validateParams(params)
+  const { net, every, unit, periodSeconds, label, amount, count, ceiling, t0 } = validateParams(params, now)
   const user = params.user
 
   const userAcct = await loadAccountOrNull(net, user)
@@ -153,9 +171,8 @@ export async function createDraft(db, params, now = Math.floor(Date.now() / 1000
   const chAcct = await server(net).loadAccount(channel.publicKey())
   const startSeq = chAcct.sequenceNumber()
 
-  const t0 = now + LIMITS.signingAllowanceSeconds
   const built = buildTransactions({
-    net, user, channelPub: channel.publicKey(), startSeq, amount, destMin, t0, periodSeconds: period.seconds, count,
+    net, user, channelPub: channel.publicKey(), startSeq, amount, destMin, t0, periodSeconds, count,
   })
   const all = built.merge ? [...built.txs, built.merge] : built.txs
   for (const t of all) t.tx.sign(channel)
@@ -168,7 +185,7 @@ export async function createDraft(db, params, now = Math.floor(Date.now() / 1000
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
   db.exec('BEGIN')
   try {
-    ins.run(id, net.key, user, channel.publicKey(), channel.secret(), hashToken(cancelToken), amount, params.period, period.seconds, count, ceiling, quote, startSeq, t0, now)
+    ins.run(id, net.key, user, channel.publicKey(), channel.secret(), hashToken(cancelToken), amount, `${every} ${unit}`, periodSeconds, count, ceiling, quote, startSeq, t0, now)
     for (const t of all) {
       insTx.run(id, t.idx, t.kind, t.hash, t.seq, t.minTime, t.maxTime, t.minSeqAge, t.kind === 'buy' ? destMin : null, t.tx.toXDR(), t.kind === 'merge' ? 1 : 0, 'pending')
     }
@@ -181,7 +198,7 @@ export async function createDraft(db, params, now = Math.floor(Date.now() / 1000
     network: net.key,
     user,
     channel: channel.publicKey(),
-    amount, period: params.period, periodSeconds: period.seconds, count, ceiling,
+    amount, period: `${every} ${unit}`, periodLabel: label, periodSeconds, count, ceiling,
     quoteXlm: quote, destMin, t0, startSeq,
     txs: built.txs.map((t) => ({ idx: t.idx, hash: t.hash, seq: t.seq, minTime: t.minTime, maxTime: t.maxTime, minSeqAge: t.minSeqAge, xdr: t.tx.toXDR() })),
   }
@@ -259,6 +276,12 @@ export function finalize(db, planId, signed) {
   return publicPlan(db, planId)
 }
 
+function labelFromStored(period) {
+  const m = /^(\d+) (minutes|hours|days|weeks)$/.exec(period || '')
+  if (m) return periodLabel(Number(m[1]), m[2])
+  return { minute: 'every minute', daily: 'every day', weekly: 'every week', monthly: 'every 30 days' }[period] || period
+}
+
 export function publicPlan(db, planId) {
   const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(planId)
   if (!plan) return null
@@ -273,6 +296,7 @@ export function publicPlan(db, planId) {
     channelKeyDestroyed: plan.channel_secret === null,
     amount: plan.amount,
     period: plan.period,
+    periodLabel: labelFromStored(plan.period),
     periodSeconds: plan.period_seconds,
     count: plan.count,
     ceiling: plan.ceiling,

@@ -24,7 +24,7 @@ function syntheticDraft() {
   for (const t of txs) t.tx.sign(channel)
   const id = newPlanId(), token = newCancelToken()
   db.prepare(`INSERT INTO plans (id, network, user, channel, channel_secret, cancel_hash, amount, period, period_seconds, count, ceiling, quote_xlm, start_seq, t0, status, created_at)
-    VALUES (?, 'testnet', ?, ?, ?, ?, '10', 'minute', 60, 2, 25, '6.25', ?, ?, 'draft', ?)`).run(id, user.publicKey(), channel.publicKey(), channel.secret(), hashToken(token), startSeq, t0, t0 - 60)
+    VALUES (?, 'testnet', ?, ?, ?, ?, '10', '1 minutes', 60, 2, 25, '6.25', ?, ?, 'draft', ?)`).run(id, user.publicKey(), channel.publicKey(), channel.secret(), hashToken(token), startSeq, t0, t0 - 60)
   const ins = db.prepare(`INSERT INTO txs (plan_id, idx, kind, hash, seq, min_time, max_time, min_seq_age, dest_min, xdr, signed, status) VALUES (?, ?, 'buy', ?, ?, ?, ?, ?, '5', ?, 0, 'pending')`)
   for (const t of txs) ins.run(id, t.idx, t.hash, t.seq, t.minTime, t.maxTime, t.minSeqAge, t.tx.toXDR())
   const userSigned = txs.map((t) => { const tx = new Transaction(t.tx.toXDR(), net.passphrase); tx.sign(user); return { idx: t.idx, xdr: tx.toXDR() } })
