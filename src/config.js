@@ -29,6 +29,7 @@ export const NETWORKS = {
     tickMs: 30000,
     maxAmount: Number(env.DAMLA_MAINNET_MAX_AMOUNT || 250), // beta cap per purchase, bounds the "bad moment" risk
     enabled: env.DAMLA_MAINNET_ENABLED === '1', // key may be prepared before the treasury is funded
+    pilotUsers: (env.DAMLA_MAINNET_PILOT_USERS || '').split(',').map((s) => s.trim()).filter(Boolean),
     channelFunding: '2.5', // XLM: 1 XLM base reserve + fees, merged back when the plan ends
   },
 }

@@ -56,6 +56,9 @@ export function openDb(path) {
   // additive migrations
   const cols = db.prepare('PRAGMA table_info(plans)').all().map((c) => c.name)
   if (!cols.includes('next_check_at')) db.exec('ALTER TABLE plans ADD COLUMN next_check_at INTEGER NOT NULL DEFAULT 0')
+  if (!cols.includes('mode')) db.exec("ALTER TABLE plans ADD COLUMN mode TEXT NOT NULL DEFAULT 'individual'")
+  if (!cols.includes('setup_hash')) db.exec('ALTER TABLE plans ADD COLUMN setup_hash TEXT')
+  if (!cols.includes('setup_xdr')) db.exec('ALTER TABLE plans ADD COLUMN setup_xdr TEXT')
   return db
 }
 

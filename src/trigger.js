@@ -6,9 +6,10 @@
  * consumes its sequence slot; the purchase simply waits until its window ends.
  */
 import { NETWORKS } from './config.js'
-import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, server } from './horizon.js'
+import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, server, transactionOrNull } from './horizon.js'
 import { submitWithFeeBump } from './feebump.js'
 import { abandonDraft, receivedXlm } from './plan.js'
+import { recoverAuthorization } from './single.js'
 
 const CLOCK_MARGIN = 6 // seconds
 const TERMINAL = new Set(['success', 'failed', 'expired', 'superseded', 'cancelled'])
@@ -22,6 +23,20 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
 
   function mark(planId, idx, status, note, extra = {}) {
     setTx.run(status, note ?? null, extra.code ?? null, extra.ledger ?? null, extra.received ?? null, extra.executedAt ?? null, extra.attempt ? 1 : 0, planId, idx)
+  }
+
+  async function reconcile(net, plan, tx) {
+    const record = await transactionOrNull(net, tx.hash)
+    if (!record) return null
+    const success = record.successful === true
+    const received = success ? receivedXlm(record.result_xdr) : null
+    const confirmedAt = record.created_at ? Math.floor(Date.parse(record.created_at) / 1000) : NaN
+    mark(plan.id, tx.idx, success ? 'success' : 'failed', 'confirmed from Horizon by transaction hash', {
+      ledger: record.ledger, received,
+      executedAt: Number.isFinite(confirmedAt) ? confirmedAt : now(),
+    })
+    log(`[${plan.id.slice(0, 8)}] #${tx.idx} reconciled ${success ? 'success' : 'failed'} ledger ${record.ledger}`)
+    return success ? 'success' : 'failed'
   }
 
   async function submit(net, plan, tx) {
@@ -42,8 +57,10 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
         return 'failed'
       }
       if (rc.tx === 'tx_bad_seq') {
-        mark(plan.id, tx.idx, 'superseded', 'sequence already consumed', { code: rc.tx, attempt: true })
-        return 'superseded'
+        const confirmed = await reconcile(net, plan, tx)
+        if (confirmed) return confirmed
+        mark(plan.id, tx.idx, 'pending', 'sequence changed; checking transaction hash on Horizon', { code: rc.tx, attempt: true })
+        return 'wait'
       }
       if (rc.tx === 'tx_too_late') {
         mark(plan.id, tx.idx, 'expired', 'window closed', { code: rc.tx, attempt: true })
@@ -95,7 +112,19 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
 
     for (const tx of buys) {
       if (TERMINAL.has(tx.status)) continue
-      if (seq >= BigInt(tx.seq)) { mark(plan.id, tx.idx, 'superseded', 'a later purchase already ran'); continue }
+      if (seq >= BigInt(tx.seq)) {
+        if (await reconcile(net, plan, tx)) continue
+        // A missing record may still be indexing, but after the signed time
+        // window and a finality grace it cannot become a new purchase.
+        if (tx.attempts > 0 && t <= tx.max_time + 120) {
+          noteTx.run('sequence consumed; awaiting transaction record on Horizon', plan.id, tx.idx)
+          nextCheck = t + WAIT_RETRY
+          continue
+        }
+        mark(plan.id, tx.idx, 'superseded', 'a later purchase already ran')
+        continue
+      }
+      if (plan.status === 'cancelled') { mark(plan.id, tx.idx, 'cancelled', 'plan stopped'); continue }
       if (t > tx.max_time) { mark(plan.id, tx.idx, 'expired', tx.note ? `window closed (${tx.note})` : 'window closed'); continue }
       // ledger close time can trail wall-clock by a few seconds; leave a small margin so a
       // submission is never rejected as tx_too_early just because the next ledger has not closed
@@ -120,7 +149,8 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
         nextCheck = t + WAIT_RETRY
         break
       }
-      await submit(net, plan, tx)
+      const submitted = await submit(net, plan, tx)
+      if (submitted === 'wait') nextCheck = t + WAIT_RETRY
       break // one submission per plan per tick
     }
 
@@ -131,16 +161,20 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
 
     if (merge && merge.status === 'pending' && t >= merge.min_time && (allDone || plan.status === 'cancelled')) {
       const r = await submit(net, { ...plan }, merge)
-      if (r === 'success' || r === 'superseded') setPlan.run(plan.status === 'cancelled' ? 'cancelled' : 'done', 'channel merged back to treasury', t, plan.id)
+      if (r === 'success' || r === 'superseded') setPlan.run(plan.status === 'cancelled' ? 'cancelled' : 'done', net.treasurySecret ? 'channel merged back to treasury' : 'unused authorizations cleared', t, plan.id)
     }
   }
 
   async function expireDrafts(ttlSeconds) {
     const t = now()
-    const stale = db.prepare("SELECT id FROM plans WHERE status = 'draft' AND created_at < ?").all(t - ttlSeconds)
+    const authorizing = db.prepare("SELECT id FROM plans WHERE status = 'authorizing' AND next_check_at <= ?").all(t)
+    for (const { id } of authorizing) {
+      try { await recoverAuthorization(db, id) } catch (err) { log(`[${id.slice(0, 8)}] authorization recovery: ${err.message}`) }
+    }
+    const stale = db.prepare("SELECT id FROM plans WHERE ((status = 'draft' OR status = 'funding') AND created_at < ?) OR (status = 'cleanup' AND next_check_at <= ?)").all(t - ttlSeconds, t)
     for (const { id } of stale) {
       await abandonDraft(db, id, t)
-      log(`[${id.slice(0, 8)}] draft abandoned, channel merged back`)
+      log(`[${id.slice(0, 8)}] draft cleanup checked`)
     }
   }
 
