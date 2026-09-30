@@ -2,7 +2,7 @@
 (function () {
   var W = window.damlaWallet;
   var API = W.apiBase;
-  var state = { ceiling: 25, account: null, busy: false, quote: null, enabled: null, signing: 0 };
+  var state = { ceiling: 25, account: null, busy: false, quote: null, enabled: null, mainnetPilot: false, signing: 0 };
   var UNIT_S = { minutes: 60, hours: 3600, days: 86400, weeks: 7 * 86400 };
   var MIN_PERIOD = { testnet: 60, mainnet: 3600 };
   var MAX_PERIOD = 90 * 86400;
@@ -87,7 +87,12 @@
   function renderNetwork() {
     var b = $('net-banner');
     if (!b) return;
-    if (netEnabled()) { b.hidden = true; $('sign').disabled = Boolean(problem()); return; }
+    if (netEnabled()) {
+      b.hidden = !(W.network === 'mainnet' && state.mainnetPilot);
+      if (!b.hidden) b.textContent = 'Mainnet pilot: only approved wallet addresses can create plans.';
+      $('sign').disabled = Boolean(problem());
+      return;
+    }
     b.hidden = false;
     b.innerHTML = '<b>Mainnet is not open yet.</b> Damla runs on Stellar testnet today, with free test USDC so you can try the whole flow. Switch to <b>Testnet</b> at the top right.';
     $('sign').disabled = true;
@@ -304,6 +309,7 @@
 
   fetch(API + '/api/health').then(function (x) { return x.json(); }).then(function (h) {
     state.enabled = h.networks || [];
+    state.mainnetPilot = Boolean(h.mainnetPilot);
     var ms = document.querySelector('#net-switch [data-net="mainnet"]');
     if (ms && state.enabled.indexOf('mainnet') < 0) { ms.title = 'Mainnet is not open yet'; ms.classList.add('off'); }
     refresh();

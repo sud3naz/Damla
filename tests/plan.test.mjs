@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Keypair, Transaction } from '@stellar/stellar-sdk'
 import { NETWORKS } from '../src/config.js'
-import { buildTransactions, floorFromQuote, schedule, validateParams, sigBytes, stroopsToAmount } from '../src/plan.js'
+import { buildTransactions, floorFromQuote, requirePilotAccess, schedule, validateParams, sigBytes, stroopsToAmount } from '../src/plan.js'
 
 const net = NETWORKS.testnet
 const user = Keypair.random()
@@ -67,4 +67,13 @@ test('validateParams rejects bad input', () => {
   assert.throws(() => validateParams({ ...ok, unit: '__proto__' }), /unit/)
   assert.throws(() => validateParams({ ...ok, unit: 'constructor' }), /unit/)
   assert.throws(() => validateParams({ ...ok, network: '__proto__' }), /network/)
+})
+
+test('mainnet draft access fails closed until a wallet is approved', () => {
+  const pilot = { key: 'mainnet', pilotUsers: [user.publicKey()] }
+  assert.doesNotThrow(() => requirePilotAccess(pilot, user.publicKey()))
+  assert.throws(() => requirePilotAccess(pilot, channel.publicKey()), /approved pilot wallets/)
+  assert.throws(() => requirePilotAccess({ key: 'mainnet', pilotUsers: [] }, user.publicKey()), /approved pilot wallets/)
+  assert.doesNotThrow(() => requirePilotAccess({ key: 'mainnet', pilotUsers: ['*'] }, channel.publicKey()))
+  assert.doesNotThrow(() => requirePilotAccess({ key: 'testnet' }, channel.publicKey()))
 })

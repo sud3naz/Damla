@@ -30,6 +30,13 @@ export class PlanError extends Error {
   constructor(message, status = 400) { super(message); this.status = status }
 }
 
+export function requirePilotAccess(net, user) {
+  if (net.key !== 'mainnet') return
+  const allowed = net.pilotUsers || []
+  if (!allowed.includes('*') && !allowed.includes(user))
+    throw new PlanError('mainnet is limited to approved pilot wallets', 403)
+}
+
 export function periodLabel(every, unit) {
   const word = every === 1 ? unit.replace(/s$/, '') : unit
   return every === 1 ? `every ${word}` : `every ${every} ${word}`
@@ -169,6 +176,7 @@ export function hashToken(t) { return createHash('sha256').update(t).digest('hex
  */
 export async function createDraft(db, params, now = Math.floor(Date.now() / 1000)) {
   const { net, every, unit, periodSeconds, label, amount, count, ceiling, t0 } = validateParams(params, now)
+  requirePilotAccess(net, params.user)
   const mode = params.mode === 'single' ? 'single' : 'individual'
   if (mode === 'single' && count > 18) throw new PlanError('single-approval plans support at most 18 purchases (Stellar signer limit)')
   const user = params.user

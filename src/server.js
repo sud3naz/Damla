@@ -119,11 +119,14 @@ export function createServer(db, { webRoot } = {}) {
     const p = url.pathname
     const q = url.searchParams
 
-    if (req.method === 'GET' && p === '/api/health') return json(res, 200, { ok: true, networks: enabledNetworks(), now: Math.floor(Date.now() / 1000) }, origin)
+    if (req.method === 'GET' && p === '/api/health') return json(res, 200, {
+      ok: true, networks: enabledNetworks(), mainnetPilot: !NETWORKS.mainnet.pilotUsers.includes('*'), now: Math.floor(Date.now() / 1000),
+    }, origin)
 
     if (req.method === 'GET' && p === '/api/config') {
       return json(res, 200, {
         networks: enabledNetworks(),
+        mainnetPilot: !NETWORKS.mainnet.pilotUsers.includes('*'),
         units: UNITS,
         limits: LIMITS,
         maxAmount: Object.fromEntries(Object.entries(NETWORKS).map(([k, v]) => [k, Math.min(LIMITS.maxAmount, v.maxAmount || LIMITS.maxAmount)])),

@@ -10,7 +10,7 @@ Paylaşılan Instawards SOW ekran görüntülerindeki 4.1, 5.1 ve 6.1 maddelerin
 
 ## Doğrulama
 
-- `npm test`: 34/34 geçti. Gerçek tarayıcı SDK paketiyle XDR çözme, bağımsız Horizon fiyat sorgusu, mainnet USDC/ağ doğrulaması, sahte imzacı hash'i, yönlendirilmiş ödeme, geç kalan Horizon sonucu, rezerv temizliği ve kurtarma dışa aktarımı test edildi.
+- `npm test`: 35/35 geçti. Gerçek tarayıcı SDK paketiyle XDR çözme, bağımsız Horizon fiyat sorgusu, mainnet USDC/ağ ve pilot cüzdan doğrulaması, sahte imzacı hash'i, yönlendirilmiş ödeme, geç kalan Horizon sonucu, rezerv temizliği ve kurtarma dışa aktarımı test edildi.
 - Canlı `https://damla-lake.vercel.app/` tanıtım sayfası, `/app.html`, `review.js` ve Stellar SDK HTTP 200 verdi. Üretim arayüzü canlı testnet API fiyatını gösterdi. `https://damla-api.103-244-227-82.sslip.io/api/health` HTTP 200 ve yalnız `testnet` döndürdü.
 - `npm audit --omit=dev --audit-level=high`: sıfır bilinen güvenlik açığı bildirdi.
 - Codex Security tek onay akışı taramasında üç bulgu (bir orta, iki düşük) raporladı. Tarama anındaki kodda olan tarayıcı XDR doğrulaması, belirsiz sonuçtan sonra temizlik ve export eksiği yerel olarak düzeltildi; düzeltmeler test edildi. Tarama raporu düzeltme öncesi anlık görüntüyü anlatır.
@@ -24,6 +24,6 @@ Paylaşılan Instawards SOW ekran görüntülerindeki 4.1, 5.1 ve 6.1 maddelerin
 
 ## Mainnet geçiş kapısı
 
-Mainnet treasury adresi `GBX7JD3TBBGRLBPV5IV4ENB4TLDZ6GPJYY4R5KS4HT4GYPFHY2WBHPXM` henüz Stellar Public Network üzerinde oluşturulmamış (Horizon 404). Adres, servis kanallarını fonlamak içindir; kullanıcı ödeme/ödül adresi değildir. Kaynak cüzdan ve XLM fonlama tutarı netleşip işlem zincirde doğrulanmadan `DAMLA_MAINNET_ENABLED=1` açılmamalı. İlk küçük USDC denemesi ve gerçek Freighter akışı da zincir hash'leriyle doğrulanmalı. Dağıtım öncesi VPS kaynak ve veritabanı yedeği `/var/backups/damla/pre-single-20260930/` altında alındı; anahtar içeren `env` kopyası yalnız sunucuda root erişimindedir.
+Mainnet treasury adresi `GBX7JD3TBBGRLBPV5IV4ENB4TLDZ6GPJYY4R5KS4HT4GYPFHY2WBHPXM` henüz Stellar Public Network üzerinde oluşturulmamış (Horizon 404). Adres, servis kanallarını fonlamak içindir; kullanıcı ödeme/ödül adresi değildir. Kaynak cüzdan ve XLM fonlama tutarı netleşip işlem zincirde doğrulanmadan `DAMLA_MAINNET_ENABLED=1` açılmamalı. Pilot aşamada `DAMLA_MAINNET_PILOT_USERS` yalnız deneme cüzdanını içermeli; boş değer bütün mainnet planlarını reddeder, `*` ise halka açık oluşturmayı başlatır. İlk küçük USDC denemesi ve gerçek Freighter akışı zincir hash'leriyle doğrulanmalı. Dağıtım öncesi VPS kaynak ve veritabanı yedeği `/var/backups/damla/pre-single-20260930/` altında alındı; anahtar içeren `env` kopyası yalnız sunucuda root erişimindedir.
 
 Test hesapları Stellar **testnet** üzerindedir; kullanıcı ödül/ödeme cüzdanı değildir.
