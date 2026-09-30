@@ -6,8 +6,8 @@ import { createTrigger } from './trigger.js'
 
 const db = openDb(SERVER.dbPath)
 const webRoot = SERVER.serveStatic ? resolve(process.cwd()) : null
-const app = createServer(db, { webRoot })
 const trigger = createTrigger(db)
+const app = createServer(db, { webRoot, isSubmitting: trigger.isSubmitting })
 
 const nets = enabledNetworks()
 const tickMs = Math.min(...nets.map((k) => NETWORKS[k].tickMs))

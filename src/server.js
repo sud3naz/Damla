@@ -88,7 +88,7 @@ function netFrom(q) {
   return net
 }
 
-export function createServer(db, { webRoot } = {}) {
+export function createServer(db, { webRoot, isSubmitting = () => false } = {}) {
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost')
     const origin = allowedOrigin(req)
@@ -196,9 +196,10 @@ export function createServer(db, { webRoot } = {}) {
     if (req.method === 'POST' && p === '/api/plans') {
       const body = await readJson(req)
       netFrom(new URLSearchParams({ network: body.network || '' }))
-      const busy = draftBudget(ip)
-      if (busy) throw new PlanError(busy, 429)
-      const draft = await createDraft(db, body)
+      const draft = await createDraft(db, body, undefined, () => {
+        const busy = draftBudget(ip)
+        if (busy) throw new PlanError(busy, 429)
+      })
       return json(res, 201, draft, origin)
     }
 
@@ -228,7 +229,7 @@ export function createServer(db, { webRoot } = {}) {
         const body = await readJson(req)
         const before = publicPlan(db, id)
         if (before?.status === 'authorizing') await recoverAuthorization(db, id, { submit: false })
-        const plan = cancelPlan(db, id, body.token)
+        const plan = cancelPlan(db, id, body.token, { isSubmitting })
         if (plan.status === 'cleanup') await abandonDraft(db, id)
         return json(res, 200, publicPlan(db, id), origin)
       }

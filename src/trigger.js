@@ -17,8 +17,13 @@ const TERMINAL = new Set(['success', 'failed', 'expired', 'superseded', 'cancell
 export function createTrigger(db, { log = console.log, now = () => Math.floor(Date.now() / 1000) } = {}) {
   const setTx = db.prepare('UPDATE txs SET status = ?, note = ?, result_code = ?, ledger = ?, received_xlm = ?, executed_at = ?, attempts = attempts + ? WHERE plan_id = ? AND idx = ?')
   const noteTx = db.prepare('UPDATE txs SET note = ? WHERE plan_id = ? AND idx = ?')
-  const setPlan = db.prepare('UPDATE plans SET status = ?, note = ?, ended_at = ? WHERE id = ?')
-  const setNext = db.prepare('UPDATE plans SET next_check_at = ? WHERE id = ?')
+  const setPlanIfActive = db.prepare("UPDATE plans SET status = ?, note = ?, ended_at = ? WHERE id = ? AND status = 'active'")
+  const setPlanIfRunning = db.prepare("UPDATE plans SET status = ?, note = ?, ended_at = ? WHERE id = ? AND status IN ('active', 'completed')")
+  const setPlanIfCancelled = db.prepare("UPDATE plans SET status = ?, note = ?, ended_at = ? WHERE id = ? AND status = 'cancelled'")
+  const setNext = db.prepare("UPDATE plans SET next_check_at = ? WHERE id = ? AND status <> 'cancelled'")
+  const liveBuy = db.prepare('SELECT p.status AS plan_status, t.status AS tx_status FROM plans p JOIN txs t ON t.plan_id = p.id WHERE p.id = ? AND t.idx = ?')
+  const planStatus = db.prepare('SELECT status FROM plans WHERE id = ?')
+  const submitting = new Set()
   const WAIT_RETRY = 30 // seconds between re-checks while a purchase waits on funds or price
 
   function mark(planId, idx, status, note, extra = {}) {
@@ -97,14 +102,14 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
     // no Horizon traffic while nothing can happen yet
     if (t < (plan.next_check_at || 0)) return
     const due = nextDue(plan, buys, merge)
-    if (due === Infinity) { if (plan.status === 'active') setPlan.run('completed', null, null, plan.id); return }
+    if (due === Infinity) { if (plan.status === 'active') setPlanIfActive.run('completed', null, null, plan.id); return }
     if (t < due) { setNext.run(due, plan.id); return }
     let nextCheck = 0
 
     const chan = await loadAccountOrNull(net, plan.channel)
     if (!chan) {
       // channel already merged away (or never existed): nothing more can run
-      setPlan.run('done', 'channel account merged', t, plan.id)
+      setPlanIfRunning.run('done', 'channel account merged', t, plan.id)
       return
     }
     const seq = BigInt(chan.sequenceNumber())
@@ -149,19 +154,31 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
         nextCheck = t + WAIT_RETRY
         break
       }
-      const submitted = await submit(net, plan, tx)
+      // Network checks above yielded to the API, so a stop may have landed.
+      // Mark the actual submission in flight before yielding again; the API
+      // returns 409 instead of claiming that an in-flight buy has stopped.
+      const live = liveBuy.get(plan.id, tx.idx)
+      if (live?.plan_status !== 'active' || live.tx_status !== 'pending') break
+      submitting.add(plan.id)
+      let submitted
+      try { submitted = await submit(net, plan, tx) }
+      finally { submitting.delete(plan.id) }
       if (submitted === 'wait') nextCheck = t + WAIT_RETRY
       break // one submission per plan per tick
     }
 
     const fresh = db.prepare("SELECT status FROM txs WHERE plan_id = ? AND kind = 'buy'").all(plan.id)
     const allDone = fresh.every((x) => TERMINAL.has(x.status))
-    if (allDone && plan.status === 'active') setPlan.run('completed', null, null, plan.id)
+    if (allDone && plan.status === 'active') setPlanIfActive.run('completed', null, null, plan.id)
     setNext.run(nextCheck, plan.id)
 
-    if (merge && merge.status === 'pending' && t >= merge.min_time && (allDone || plan.status === 'cancelled')) {
+    if (merge && merge.status === 'pending' && t >= merge.min_time && (allDone || planStatus.get(plan.id)?.status === 'cancelled')) {
       const r = await submit(net, { ...plan }, merge)
-      if (r === 'success' || r === 'superseded') setPlan.run(plan.status === 'cancelled' ? 'cancelled' : 'done', net.treasurySecret ? 'channel merged back to treasury' : 'unused authorizations cleared', t, plan.id)
+      if (r === 'success' || r === 'superseded') {
+        const note = net.treasurySecret ? 'channel merged back to treasury' : 'unused authorizations cleared'
+        if (planStatus.get(plan.id)?.status === 'cancelled') setPlanIfCancelled.run('cancelled', note, t, plan.id)
+        else setPlanIfRunning.run('done', note, t, plan.id)
+      }
     }
   }
 
@@ -200,7 +217,7 @@ export function createTrigger(db, { log = console.log, now = () => Math.floor(Da
   }
   function stop() { if (timer) clearTimeout(timer) }
 
-  return { tick, tickPlan, expireDrafts, start, stop }
+  return { tick, tickPlan, expireDrafts, start, stop, isSubmitting: (id) => submitting.has(id) }
 }
 
 export { server }

@@ -149,3 +149,122 @@ test('an absent attempted hash is superseded after its window and finality grace
     assert.equal(db.prepare('SELECT status FROM txs WHERE plan_id = ? AND idx = 1').get(id).status, 'superseded')
   } finally { mock.restore(); db.close() }
 })
+
+test('mainnet limits unsigned treasury exposure to one draft and requires one approval', async () => {
+  const db = openDb(':memory:')
+  const user = Keypair.random(), treasury = Keypair.random()
+  const mainnet = NETWORKS.mainnet
+  const horizon = server(mainnet)
+  const old = { fetch: globalThis.fetch, loadAccount: horizon.loadAccount, submitTransaction: horizon.submitTransaction, enabled: mainnet.enabled, treasurySecret: mainnet.treasurySecret, pilotUsers: mainnet.pilotUsers }
+  let fundingCalls = 0
+  mainnet.enabled = true
+  mainnet.treasurySecret = treasury.secret()
+  mainnet.pilotUsers = [user.publicKey()]
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/paths/strict-send')) return Response.json({ _embedded: { records: [{ path: [], destination_amount: '5.0000000' }] } })
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  horizon.loadAccount = async (address) => {
+    const acct = new Account(address, '4096')
+    if (address === user.publicKey()) {
+      acct.signers = [{ key: address, weight: 1 }]
+      acct.thresholds = { high_threshold: 1, med_threshold: 1 }
+      acct.balances = [{ asset_type: 'native', balance: '5' }, { asset_code: 'USDC', asset_issuer: mainnet.usdc.issuer, balance: '5' }]
+    }
+    return acct
+  }
+  horizon.submitTransaction = async () => { fundingCalls++; return { hash: 'test-hash', ledger: 1 } }
+  try {
+    const params = { network: 'mainnet', user: user.publicKey(), amount: '1', every: 1, unit: 'hours', count: 2, ceiling: 25, mode: 'single' }
+    await assert.rejects(createDraft(db, { ...params, mode: 'individual' }), /requires single approval/)
+    const first = await createDraft(db, params)
+    assert.equal(fundingCalls, 1)
+    await assert.rejects(createDraft(db, params), /unsigned draft/)
+    assert.equal(fundingCalls, 1, 'a second unsigned draft never gets treasury funding')
+    assert.equal(cancelPlan(db, first.id, first.cancelToken).status, 'cleanup')
+    await abandonDraft(db, first.id)
+    const next = await createDraft(db, params)
+    assert.ok(next.id)
+    assert.equal(fundingCalls, 3, 'the first channel merged and the next was funded')
+  } finally {
+    globalThis.fetch = old.fetch
+    horizon.loadAccount = old.loadAccount
+    horizon.submitTransaction = old.submitTransaction
+    mainnet.enabled = old.enabled
+    mainnet.treasurySecret = old.treasurySecret
+    mainnet.pilotUsers = old.pilotUsers
+    db.close()
+  }
+})
+
+test('stopping during a quote cannot submit or overwrite the cancelled plan', async () => {
+  const db = openDb(':memory:')
+  const user = Keypair.random(), channel = Keypair.random()
+  const mock = mockedNetwork(user)
+  const t0 = 2_000_000_000
+  let releaseQuote, quoteStarted
+  const started = new Promise((resolve) => { quoteStarted = resolve })
+  let submissions = 0
+  try {
+    const built = buildTransactions({ net, user: user.publicKey(), channelPub: channel.publicKey(), startSeq: '4096', amount: '5', destMin: '1', t0, periodSeconds: 60, count: 2 })
+    const id = newPlanId(), token = newCancelToken()
+    db.prepare(`INSERT INTO plans (id, network, user, channel, channel_secret, cancel_hash, amount, period, period_seconds, count, ceiling, quote_xlm, start_seq, t0, status, created_at)
+      VALUES (?, 'testnet', ?, ?, NULL, ?, '5', '1 minutes', 60, 2, 25, '5', '4096', ?, 'active', ?)`)
+      .run(id, user.publicKey(), channel.publicKey(), hashToken(token), t0, t0 - 60)
+    const ins = db.prepare(`INSERT INTO txs (plan_id, idx, kind, hash, seq, min_time, max_time, min_seq_age, dest_min, xdr, signed, status)
+      VALUES (?, ?, 'buy', ?, ?, ?, ?, ?, '1', ?, 1, 'pending')`)
+    for (const tx of built.txs) ins.run(id, tx.idx, tx.hash, tx.seq, tx.minTime, tx.maxTime, tx.minSeqAge, tx.tx.toXDR())
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/paths/strict-send')) {
+        quoteStarted()
+        await new Promise((resolve) => { releaseQuote = resolve })
+        return Response.json({ _embedded: { records: [{ path: [], destination_amount: '5.0000000' }] } })
+      }
+      throw new Error(`unexpected fetch: ${url}`)
+    }
+    mock.horizon.submitTransaction = async () => { submissions++; return { hash: 'unexpected', ledger: 1 } }
+    const trigger = createTrigger(db, { log: () => {}, now: () => t0 + 7 })
+    const ticking = trigger.tick()
+    await started
+    assert.equal(cancelPlan(db, id, token).status, 'cancelled')
+    releaseQuote()
+    await ticking
+    assert.equal(submissions, 0)
+    assert.equal(db.prepare('SELECT status FROM plans WHERE id = ?').get(id).status, 'cancelled')
+    assert.equal(db.prepare('SELECT status FROM txs WHERE plan_id = ? AND idx = 1').get(id).status, 'cancelled')
+  } finally { mock.restore(); db.close() }
+})
+
+test('stop reports an in-flight purchase instead of claiming it was cancelled', async () => {
+  const db = openDb(':memory:')
+  const user = Keypair.random(), channel = Keypair.random()
+  const mock = mockedNetwork(user)
+  const t0 = 2_000_000_000
+  let releaseSubmit, submitStarted
+  const started = new Promise((resolve) => { submitStarted = resolve })
+  try {
+    const built = buildTransactions({ net, user: user.publicKey(), channelPub: channel.publicKey(), startSeq: '4096', amount: '5', destMin: '1', t0, periodSeconds: 60, count: 2 })
+    const id = newPlanId(), token = newCancelToken()
+    db.prepare(`INSERT INTO plans (id, network, user, channel, channel_secret, cancel_hash, amount, period, period_seconds, count, ceiling, quote_xlm, start_seq, t0, status, created_at)
+      VALUES (?, 'testnet', ?, ?, NULL, ?, '5', '1 minutes', 60, 2, 25, '5', '4096', ?, 'active', ?)`)
+      .run(id, user.publicKey(), channel.publicKey(), hashToken(token), t0, t0 - 60)
+    const ins = db.prepare(`INSERT INTO txs (plan_id, idx, kind, hash, seq, min_time, max_time, min_seq_age, dest_min, xdr, signed, status)
+      VALUES (?, ?, 'buy', ?, ?, ?, ?, ?, '1', ?, 1, 'pending')`)
+    for (const tx of built.txs) ins.run(id, tx.idx, tx.hash, tx.seq, tx.minTime, tx.maxTime, tx.minSeqAge, tx.tx.toXDR())
+    mock.horizon.submitTransaction = async () => {
+      submitStarted()
+      await new Promise((resolve) => { releaseSubmit = resolve })
+      return { hash: 'test-hash', ledger: 1, result_xdr: null }
+    }
+    const trigger = createTrigger(db, { log: () => {}, now: () => t0 + 7 })
+    const ticking = trigger.tick()
+    await started
+    assert.equal(trigger.isSubmitting(id), true)
+    assert.throws(() => cancelPlan(db, id, token, { isSubmitting: trigger.isSubmitting }), /being submitted/)
+    assert.equal(db.prepare('SELECT status FROM plans WHERE id = ?').get(id).status, 'active')
+    releaseSubmit()
+    await ticking
+    assert.equal(trigger.isSubmitting(id), false)
+    assert.equal(cancelPlan(db, id, token, { isSubmitting: trigger.isSubmitting }).status, 'cancelled')
+  } finally { mock.restore(); db.close() }
+})

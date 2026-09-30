@@ -174,10 +174,11 @@ export function hashToken(t) { return createHash('sha256').update(t).digest('hex
  * Create a draft plan: fund a fresh channel, quote the market, build and
  * channel-sign every transaction, persist. Returns what the browser needs.
  */
-export async function createDraft(db, params, now = Math.floor(Date.now() / 1000)) {
+export async function createDraft(db, params, now = Math.floor(Date.now() / 1000), beforeFunding = null) {
   const { net, every, unit, periodSeconds, label, amount, count, ceiling, t0 } = validateParams(params, now)
   requirePilotAccess(net, params.user)
   const mode = params.mode === 'single' ? 'single' : 'individual'
+  if (net.key === 'mainnet' && mode !== 'single') throw new PlanError('mainnet requires single approval')
   if (mode === 'single' && count > 18) throw new PlanError('single-approval plans support at most 18 purchases (Stellar signer limit)')
   const user = params.user
 
@@ -204,6 +205,16 @@ export async function createDraft(db, params, now = Math.floor(Date.now() / 1000
   const quote = await quoteStrictSend(net, amount)
   if (!quote) throw new PlanError('no direct XLM/USDC market for this amount right now', 503)
   const destMin = floorFromQuote(quote, ceiling)
+
+  // A pilot address is public information, not proof of wallet ownership.
+  // Keep unsigned mainnet exposure to one treasury-funded channel.
+  if (net.key === 'mainnet') {
+    const outstanding = db.prepare("SELECT COUNT(*) AS n FROM plans WHERE network = 'mainnet' AND status IN ('funding', 'draft', 'authorizing', 'cleanup')").get().n
+    if (outstanding >= net.maxPendingDrafts)
+      throw new PlanError('mainnet pilot already has an unsigned draft; finish or wait for cleanup', 429)
+  }
+  // Charge the scarce budget only after validation, immediately before funding.
+  if (beforeFunding) beforeFunding()
 
   const id = newPlanId()
   const cancelToken = newCancelToken()
@@ -411,10 +422,11 @@ export function exportPlan(db, planId, token) {
   }
 }
 
-export function cancelPlan(db, planId, token) {
+export function cancelPlan(db, planId, token, { isSubmitting = () => false } = {}) {
   const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(planId)
   if (!plan) throw new PlanError('plan not found', 404)
   if (typeof token !== 'string' || hashToken(token) !== plan.cancel_hash) throw new PlanError('bad cancel token', 403)
+  if (isSubmitting(planId)) throw new PlanError('a purchase is being submitted; retry stopping this plan shortly', 409)
   if (['done', 'cancelled'].includes(plan.status)) return publicPlan(db, planId)
   if (plan.status === 'authorizing') throw new PlanError('wallet authorization is being reconciled; retry cancellation shortly', 409)
   const now = Math.floor(Date.now() / 1000)

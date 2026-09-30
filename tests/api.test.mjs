@@ -1,6 +1,9 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { Keypair } from '@stellar/stellar-sdk'
+import { NETWORKS } from '../src/config.js'
 import { openDb } from '../src/db.js'
+import { server as horizon } from '../src/horizon.js'
 import { createServer } from '../src/server.js'
 
 const db = openDb(':memory:')
@@ -31,4 +34,21 @@ test('plan creation validates before touching the network', async () => {
   const r = await fetch(`${base}/api/plans`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ network: 'testnet', user: 'nope', amount: '1', every: 1, unit: 'weeks', count: 4, ceiling: 25 }) })
   assert.equal(r.status, 400)
   assert.match((await r.json()).error, /invalid user/)
+})
+
+test('invalid drafts cannot consume the shared funding budget', async () => {
+  const endpoint = `${base}/api/plans`
+  const body = { network: 'testnet', user: 'nope', amount: '1', every: 1, unit: 'weeks', count: 2, ceiling: 25 }
+  for (let i = 0; i < 60; i++) {
+    const r = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': `198.51.100.${1 + Math.floor(i / 6)}` }, body: JSON.stringify(body) })
+    assert.equal(r.status, 400)
+  }
+  const netServer = horizon(NETWORKS.testnet)
+  const original = netServer.loadAccount
+  netServer.loadAccount = async () => { throw { response: { status: 404 } } }
+  try {
+    const r = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '198.51.100.250' }, body: JSON.stringify({ ...body, user: Keypair.random().publicKey(), mode: 'single' }) })
+    assert.equal(r.status, 400)
+    assert.match((await r.json()).error, /user account does not exist/)
+  } finally { netServer.loadAccount = original }
 })
