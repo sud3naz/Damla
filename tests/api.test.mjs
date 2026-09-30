@@ -4,7 +4,7 @@ import { Keypair } from '@stellar/stellar-sdk'
 import { NETWORKS } from '../src/config.js'
 import { openDb } from '../src/db.js'
 import { server as horizon } from '../src/horizon.js'
-import { hashToken, newCancelToken, newPlanId } from '../src/plan.js'
+import { PlanError, hashToken, newCancelToken, newPlanId } from '../src/plan.js'
 import { createServer } from '../src/server.js'
 
 const db = openDb(':memory:')
@@ -38,6 +38,26 @@ test('unsigned cleanup cannot stop a plan that became active', async () => {
   assert.equal(response.status, 409)
   assert.match((await response.json()).error, /no longer an unsigned draft/)
   assert.equal(db.prepare('SELECT status FROM plans WHERE id = ?').get(id).status, 'active')
+})
+
+test('a lost draft response can be distinguished from a request still building', async () => {
+  const net = NETWORKS.testnet, api = horizon(net), oldLoad = api.loadAccount
+  const draftId = newPlanId(), user = Keypair.random().publicKey()
+  let started, release
+  const entered = new Promise((resolve) => { started = resolve })
+  const blocked = new Promise((resolve) => { release = resolve })
+  api.loadAccount = async () => { started(); await blocked; throw new PlanError('mock account failure', 503) }
+  try {
+    const pending = fetch(`${base}/api/plans`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ network: 'testnet', user, amount: '1', every: 1, unit: 'hours', count: 2, ceiling: 10, mode: 'single', draftId, cancelToken: 'b'.repeat(48) }) })
+    await entered
+    const building = await fetch(`${base}/api/plans/${draftId}`)
+    assert.equal(building.status, 202)
+    assert.equal((await building.json()).status, 'building')
+    release()
+    assert.equal((await pending).status, 503)
+    assert.equal((await fetch(`${base}/api/plans/${draftId}`)).status, 404)
+  } finally { release(); api.loadAccount = oldLoad }
 })
 
 test('cors: unknown origins get no allow header, known ones do', async () => {

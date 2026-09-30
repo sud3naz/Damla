@@ -94,6 +94,22 @@ test('cancelling a treasury-funded unsigned draft recovers the channel immediate
   } finally { mock.restore(); db.close() }
 })
 
+test('client-held recovery credentials can cancel a draft after its response is lost', async () => {
+  const db = openDb(':memory:')
+  const user = Keypair.random()
+  const mock = mockedNetwork(user)
+  try {
+    const draftId = newPlanId(), cancelToken = 'a'.repeat(48)
+    const draft = await createDraft(db, { network: 'testnet', user: user.publicKey(), amount: '5', every: 1, unit: 'minutes', count: 2, ceiling: 25, draftId, cancelToken })
+    assert.equal(draft.id, draftId)
+    assert.equal(draft.cancelToken, cancelToken)
+    assert.equal(db.prepare('SELECT cancel_hash FROM plans WHERE id = ?').get(draftId).cancel_hash, hashToken(cancelToken))
+    assert.equal(cancelPlan(db, draftId, cancelToken, { unsignedOnly: true }).status, 'cleanup')
+    await abandonDraft(db, draftId)
+    assert.equal(db.prepare('SELECT status FROM plans WHERE id = ?').get(draftId).status, 'abandoned')
+  } finally { mock.restore(); db.close() }
+})
+
 test('advanced channel sequence reconciles a submitted hash before classifying the buy', async () => {
   const db = openDb(':memory:')
   const user = Keypair.random(), channel = Keypair.random()

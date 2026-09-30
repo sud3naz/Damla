@@ -24,8 +24,13 @@
   function savePending(p) { try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch (e) {} }
   function clearPending() { try { localStorage.removeItem(PENDING_KEY); } catch (e) {} }
   function unsignedDraft() { try { return JSON.parse(localStorage.getItem(UNSIGNED_KEY) || 'null'); } catch (e) { return null; } }
-  function saveUnsignedDraft(p) { try { localStorage.setItem(UNSIGNED_KEY, JSON.stringify(p)); } catch (e) {} }
+  function saveUnsignedDraft(p) { try { localStorage.setItem(UNSIGNED_KEY, JSON.stringify(p)); return true; } catch (e) { return false; } }
   function clearUnsignedDraft() { try { localStorage.removeItem(UNSIGNED_KEY); } catch (e) {} }
+  function randomHex(bytes) {
+    var data = new Uint8Array(bytes);
+    window.crypto.getRandomValues(data);
+    return Array.prototype.map.call(data, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  }
 
   async function cancelUnsignedDraft(p) {
     if (!p || !/^[a-f0-9]{32}$/.test(p.id) || !p.cancelToken) { clearUnsignedDraft(); return; }
@@ -34,6 +39,7 @@
     var status = await statusResponse.json();
     if (statusResponse.status === 404) { clearUnsignedDraft(); return; }
     if (!statusResponse.ok) throw new Error(status.error || 'Could not check the previous draft');
+    if (status.status === 'building' || status.status === 'funding') throw new Error(T('dyn.action.pending'));
     if (['draft', 'funding', 'cleanup'].indexOf(status.status) < 0) { clearUnsignedDraft(); return; }
     var response = await fetch(url + '/cancel', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: p.cancelToken, unsignedOnly: true })
@@ -78,6 +84,7 @@
   function problem() {
     var P = periodS(), n = count(), amt = amount();
     if (!amt || amt < 1) return T('dyn.amount.min');
+    if (W.network === 'mainnet' && state.mainnetPilot && amt > 1) return T('dyn.amount.pilot');
     if (!every()) return T('dyn.cadence.integer');
     var minP = MIN_PERIOD[W.network] || 3600;
     if (P < minP) return T('dyn.cadence.min', { network: W.network, count: minP >= 3600 ? minP / 3600 : minP / 60, unit: minP >= 3600 ? T('dyn.hour') : T('dyn.minute') });
@@ -107,13 +114,26 @@
     if (ceilingExplain) ceilingExplain.textContent = T('app.ceiling.hint', { percent: state.ceiling });
     renderNetwork();
     renderPreview();
-    if (state.quote) {
+    var pilotAmountError = W.network === 'mainnet' && state.mainnetPilot && amt > 1;
+    if (pilotAmountError) $('quote').textContent = T('dyn.amount.pilot');
+    else if (state.quote) {
       $('quote').textContent = T('dyn.quote', {
         xlm: Number(state.quote).toFixed(2),
         floor: (Number(state.quote) / (1 + state.ceiling / 100)).toFixed(2)
       });
     } else $('quote').textContent = '';
-    updateQuote();
+    if (!pilotAmountError) updateQuote();
+  }
+
+  function pilotDefaults() {
+    if (W.network !== 'mainnet' || !state.mainnetPilot) return;
+    $('amount').value = '1';
+    $('every').value = '1';
+    $('unit').value = 'hours';
+    $('count').value = '2';
+    state.ceiling = 10;
+    $('ceiling').querySelectorAll('.opt').forEach(function (o) { o.classList.toggle('on', o.dataset.s === '10'); });
+    $('ceil-label').textContent = '10%';
   }
 
   function netEnabled() { return !state.enabled || state.enabled.indexOf(W.network) >= 0; }
@@ -292,16 +312,22 @@
       }
       var previous = unsignedDraft();
       if (previous && previous.user === W.address && previous.network === W.network) {
-        setNote(T('dyn.action.recover'));
+        setNote(T('dyn.action.recoverDraft'));
         await cancelUnsignedDraft(previous);
       }
       setNote(T('dyn.action.build'));
       var pr = problem();
       if (pr) throw new Error(pr);
-      var body = { network: W.network, user: W.address, amount: String(amount()), every: every(), unit: unit(), count: count(), ceiling: state.ceiling, start: startTs(), mode: 'single' };
-      draft = await fetch(API + '/api/plans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
-      if (draft.error) throw new Error(draft.error);
-      saveUnsignedDraft({ id: draft.id, cancelToken: draft.cancelToken, network: W.network, user: W.address });
+      var credentials = { id: randomHex(16), cancelToken: randomHex(24), network: W.network, user: W.address, createdAt: Date.now() };
+      if (!saveUnsignedDraft(credentials)) throw new Error(T('dyn.action.storage'));
+      var body = { network: W.network, user: W.address, amount: String(amount()), every: every(), unit: unit(), count: count(), ceiling: state.ceiling, start: startTs(), mode: 'single', draftId: credentials.id, cancelToken: credentials.cancelToken };
+      var response = await fetch(API + '/api/plans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      draft = await response.json();
+      if (!response.ok || draft.error) {
+        if (response.status < 500) clearUnsignedDraft();
+        throw new Error(draft.error || T('dyn.api.unavailable'));
+      }
+      if (draft.id !== credentials.id || draft.cancelToken !== credentials.cancelToken) throw new Error(T('dyn.action.badresponse'));
       if (!draft.authorization) throw new Error(T('dyn.action.noauth'));
       setNote(T('dyn.action.check'));
       var trustedQuote = await window.damlaReview.trustedQuote(body.network, body.amount);
@@ -323,8 +349,9 @@
       await activateAuthorization(authorization);
     } catch (e) {
       var message = e.message || String(e);
-      if (draft && draft.id && !signed) {
-        try { await cancelUnsignedDraft(draft); }
+      if (!signed) {
+        var unfinished = unsignedDraft();
+        if (unfinished && unfinished.network === W.network && unfinished.user === W.address) try { await cancelUnsignedDraft(unfinished); }
         catch (cleanupError) { message += ' · ' + (cleanupError.message || String(cleanupError)); }
       }
       setNote(message, true);
@@ -350,7 +377,7 @@
   $('amount').addEventListener('input', function () { state.quote = null; refresh(); renderAccount(); });
   $('sign').addEventListener('click', signPlan);
   document.addEventListener('damla:connected', function () { setNote(''); loadAccount(); renderMyPlans(); renderPreview(); });
-  document.addEventListener('damla:network', function () { state.quote = null; refresh(); loadAccount(); renderMyPlans(); });
+  document.addEventListener('damla:network', function () { state.quote = null; pilotDefaults(); refresh(); loadAccount(); renderMyPlans(); });
   document.addEventListener('damla:language', function () {
     var mainnetButton = document.querySelector('#net-switch [data-net="mainnet"]');
     if (mainnetButton && mainnetButton.classList.contains('off')) mainnetButton.title = T('app.net.closed');
@@ -360,6 +387,7 @@
   fetch(API + '/api/health').then(function (x) { return x.json(); }).then(function (h) {
     state.enabled = h.networks || [];
     state.mainnetPilot = Boolean(h.mainnetPilot);
+    pilotDefaults();
     var ms = document.querySelector('#net-switch [data-net="mainnet"]');
     if (ms && state.enabled.indexOf('mainnet') < 0) { ms.title = T('app.net.closed'); ms.classList.add('off'); }
     refresh();

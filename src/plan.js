@@ -176,6 +176,11 @@ export function hashToken(t) { return createHash('sha256').update(t).digest('hex
  */
 export async function createDraft(db, params, now = Math.floor(Date.now() / 1000), beforeFunding = null) {
   const { net, every, unit, periodSeconds, label, amount, count, ceiling, t0 } = validateParams(params, now)
+  const clientId = params.draftId
+  const clientToken = params.cancelToken
+  if ((clientId != null || clientToken != null) &&
+      (!/^[a-f0-9]{32}$/.test(clientId || '') || !/^[a-f0-9]{48}$/.test(clientToken || '')))
+    throw new PlanError('invalid draft recovery credentials')
   requirePilotAccess(net, params.user)
   const mode = params.mode === 'single' ? 'single' : 'individual'
   if (net.key === 'mainnet' && mode !== 'single') throw new PlanError('mainnet requires single approval')
@@ -216,8 +221,8 @@ export async function createDraft(db, params, now = Math.floor(Date.now() / 1000
   // Charge the scarce budget only after validation, immediately before funding.
   if (beforeFunding) beforeFunding()
 
-  const id = newPlanId()
-  const cancelToken = newCancelToken()
+  const id = clientId || newPlanId()
+  const cancelToken = clientToken || newCancelToken()
   const channel = Keypair.random()
   const ins = db.prepare(`INSERT INTO plans (id, network, user, channel, channel_secret, cancel_hash, amount, period, period_seconds, count, ceiling, quote_xlm, start_seq, t0, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'funding', ?)`)
@@ -427,7 +432,7 @@ export function cancelPlan(db, planId, token, { isSubmitting = () => false, unsi
   if (!plan) throw new PlanError('plan not found', 404)
   if (typeof token !== 'string' || hashToken(token) !== plan.cancel_hash) throw new PlanError('bad cancel token', 403)
   if (unsignedOnly && plan.status === 'abandoned') return publicPlan(db, planId)
-  if (unsignedOnly && !['draft', 'funding', 'cleanup'].includes(plan.status))
+  if (unsignedOnly && !['draft', 'cleanup'].includes(plan.status))
     throw new PlanError('plan is no longer an unsigned draft', 409)
   if (isSubmitting(planId)) throw new PlanError('a purchase is being submitted; retry stopping this plan shortly', 409)
   if (['done', 'cancelled'].includes(plan.status)) return publicPlan(db, planId)

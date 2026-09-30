@@ -89,6 +89,8 @@ function netFrom(q) {
 }
 
 export function createServer(db, { webRoot, isSubmitting = () => false } = {}) {
+  let mainnetDraftInFlight = false
+  const inFlightDrafts = new Set()
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost')
     const origin = allowedOrigin(req)
@@ -195,12 +197,22 @@ export function createServer(db, { webRoot, isSubmitting = () => false } = {}) {
 
     if (req.method === 'POST' && p === '/api/plans') {
       const body = await readJson(req)
-      netFrom(new URLSearchParams({ network: body.network || '' }))
-      const draft = await createDraft(db, body, undefined, () => {
-        const busy = draftBudget(ip)
-        if (busy) throw new PlanError(busy, 429)
-      })
-      return json(res, 201, draft, origin)
+      const net = netFrom(new URLSearchParams({ network: body.network || '' }))
+      if (net.key === 'mainnet' && mainnetDraftInFlight)
+        throw new PlanError('mainnet draft creation is still in progress; retry shortly', 429)
+      const trackingId = /^[a-f0-9]{32}$/.test(body.draftId || '') ? body.draftId : null
+      if (net.key === 'mainnet') mainnetDraftInFlight = true
+      if (trackingId) inFlightDrafts.add(trackingId)
+      try {
+        const draft = await createDraft(db, body, undefined, () => {
+          const busy = draftBudget(ip)
+          if (busy) throw new PlanError(busy, 429)
+        })
+        return json(res, 201, draft, origin)
+      } finally {
+        if (trackingId) inFlightDrafts.delete(trackingId)
+        if (net.key === 'mainnet') mainnetDraftInFlight = false
+      }
     }
 
     const m = p.match(/^\/api\/plans\/([a-f0-9]{32})(?:\/(finalize|authorize|export|cancel))?$/)
@@ -208,6 +220,7 @@ export function createServer(db, { webRoot, isSubmitting = () => false } = {}) {
       const [, id, action] = m
       if (req.method === 'GET' && !action) {
         const plan = publicPlan(db, id)
+        if (!plan && inFlightDrafts.has(id)) return json(res, 202, { status: 'building' }, origin)
         if (!plan) throw new PlanError('plan not found', 404)
         return json(res, 200, plan, origin)
       }
