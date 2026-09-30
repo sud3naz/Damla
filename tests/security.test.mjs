@@ -94,7 +94,7 @@ test('http: export is POST + token, list-by-user is gone, oversized body is 413,
   assert.equal(pub.cancelHash, undefined)
 })
 
-test('http: helper relay only accepts the helper shapes', async () => {
+test('http: helper relay rejects plan purchase envelopes', async () => {
   const d = syntheticDraft()
   const r = await fetch(`${base}/api/helper/submit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ network: 'testnet', xdr: d.userSigned[0].xdr }) })
   assert.equal(r.status, 400)

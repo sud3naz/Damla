@@ -9,7 +9,7 @@ Setup: USDC trustline + bought 100 test USDC on the testnet DEX: [a6a21010fcc1f1
 
 - 10 USDC -> XLM, every minute, 4 purchases, ceiling +50%
 - quote at signing: 10.0000000 XLM for 10 USDC, floor (destMin): 6.6666666 XLM
-- channel account: `GBZSC2DEIIXFXCQXNFPLXDPKFLGXKDPTRHNH3APTYXM3SZNLTJTT25MA` (fresh, funded by friendbot), start sequence 20151853408845824
+- channel account: `GBZSC2DEIIXFXCQXNFPLXDPKFLGXKDPTRHNH3APTYXM3SZNLTJTT25MA` (fresh, funded by the configured testnet treasury), start sequence 20151853408845824
 - t0 = 1789483487 (2026-09-15T14:44:47.000Z)
 
 | # | seq | minSeqNum | minSeqAge | window (unix) | hash |
@@ -25,7 +25,7 @@ Setup: USDC trustline + bought 100 test USDC on the testnet DEX: [a6a21010fcc1f1
 - tampered envelope (amount 10 -> 50, original signatures reused): network answered `tx_bad_auth` ✅
 - finalize with a swapped envelope: server answered `transaction #1 was altered` ✅
 
-Plan activated at 1789483435. Channel key destroyed: true.
+Plan activated at 1789483435. Channel key cleared from the active database row: true. Historical database pages or backups were not assessed by this run.
 
 ## Execution log
 

@@ -29,6 +29,20 @@ export async function loadAccountOrNull(net, publicKey) {
   }
 }
 
+/** Resolve a submitted inner transaction hash, including fee-bumped envelopes. */
+export async function transactionOrNull(net, hash) {
+  return withRetry(async () => {
+    const response = await fetch(new URL(`/transactions/${encodeURIComponent(hash)}`, net.horizon))
+    if (response.status === 404) return null
+    if (!response.ok) {
+      const error = new Error(`horizon transaction lookup ${response.status}`)
+      error.response = { status: response.status }
+      throw error
+    }
+    return response.json()
+  })
+}
+
 export function balances(account, net) {
   const xlm = account.balances.find((b) => b.asset_type === 'native')
   const usdc = account.balances.find(

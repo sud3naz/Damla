@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Damla Docs</title>
-<meta name="description" content="Damla: non-custodial recurring XLM purchases on Stellar. Sign once, buy on a schedule, no smart contract.">
+<meta name="description" content="Damla: non-custodial recurring XLM purchases on Stellar. Sign the plan in one session, buy on a schedule, no smart contract.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 28'%3E%3Cpath d='M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z' fill='%231e88e5'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -40,19 +40,19 @@
 
       <section id="what">
         <h2>What is Damla?</h2>
-        <p>Damla is dollar-cost averaging (DCA) for Stellar: you commit to buying a fixed amount of XLM with USDC at a cadence you type yourself (every 6 hours, every 3 days, every 2 weeks, anything from an hour to 90 days), for as many purchases as you want (2 to 52), starting now or on a date you pick; you sign in one sitting, and the purchases execute automatically on Stellar's built-in DEX. It is <b>non-custodial</b>: your USDC stays in your own wallet until the moment each swap settles. It uses <b>no smart contract</b>.</p>
+        <p>Damla is dollar-cost averaging (DCA) for Stellar: you commit to buying a fixed amount of XLM with USDC at a cadence you type yourself (every 6 hours, every 3 days, every 2 weeks, anything from an hour to 90 days), for 2 to 18 purchases, starting now or on a date you pick. You approve once in Freighter, and the purchases execute automatically on Stellar's built-in DEX. It is <b>non-custodial</b>: your USDC stays in your own wallet until each swap settles. It uses <b>no smart contract</b>.</p>
         <div class="note"><i>Damla</i> is Turkish for "drop", from the proverb <i>damlaya damlaya göl olur</i>: drop by drop, a lake is formed. That is the whole product.</div>
       </section>
 
       <section id="architecture">
         <h2>Architecture</h2>
-        <p>Damla is built on <b>pre-signed transaction chains</b> using classic Stellar features (CAP-21 preconditions, Protocol 19). No Soroban, no contract accounts. It works today with Freighter and a regular G-address.</p>
+        <p>Damla is built on <b>pre-authorized transaction chains</b> using classic Stellar features (CAP-21 preconditions, Protocol 19). The channel signs each transaction; one wallet-signed setup authorizes their exact hashes. No Soroban or contract account is needed.</p>
 
         <div class="arch-step">
           <div class="n">1</div>
           <div>
-            <h3>One transaction per purchase, signed up front</h3>
-            <p>When you create a plan, Damla builds one Stellar transaction for each scheduled purchase. Every transaction contains a single <code>PathPaymentStrictSend</code> operation: send a fixed amount of your USDC, receive XLM, with a <code>destMin</code> floor protecting you from bad fills. You sign all of them in one sitting (one Freighter prompt each). The amount, asset, destination, floor and time window are inside each signed hash and can never be altered afterwards.</p>
+            <h3>One approval for exact future transaction hashes</h3>
+            <p>Damla builds one Stellar transaction for each scheduled purchase. Every transaction contains one <code>PathPaymentStrictSend</code> operation: a fixed amount of your USDC to XLM, with a <code>destMin</code> floor. Before wallet approval, the browser decodes all transactions and compares their hashes, payment terms and floor against a direct Horizon quote. One Freighter approval adds those exact hashes as pre-authorized signers to your account. Validators accept only matching hashes; the amount, asset, destination, floor and time window cannot be altered. The wallet prompt itself shows signer hashes, while the browser confirmation shows the decoded terms.</p>
           </div>
         </div>
 
@@ -60,8 +60,8 @@
           <div class="n">2</div>
           <div>
             <h3>A fresh channel account per plan</h3>
-            <p>Each plan gets its own brand-new <b>channel account</b>. It is the <i>source</i> of every transaction (it pays the sub-cent fees and owns the sequence clock), while the <i>operation's</i> source is you. Two reasons. First, the chain lives on the channel's sequence numbers, so nothing you do in your own wallet can invalidate or delay it. Second, the channel does nothing else, so its clock is clean. The channel never holds user funds: only its own 1 XLM reserve, which a pre-signed merge returns to the service after the plan ends.</p>
-            <p><b>The channel's secret key is destroyed the moment your plan is activated.</b> It signs your purchases once, then it is deleted. After that, the only transactions that can ever be built on that account are the ones you co-signed.</p>
+            <p>Each plan gets its own brand-new <b>channel account</b>. It is the <i>source</i> of every purchase transaction (it pays the fees and owns the sequence clock), while the swap <i>operation's</i> source is you. Your later wallet activity cannot change the channel sequence. The channel never holds your USDC. A pre-authorized cleanup transaction removes unused purchase signers and, when a treasury is configured, merges the channel back to that treasury.</p>
+            <p><b>The service clears the channel's secret key from its active database row when your plan is activated.</b> It signs your purchases once, then the running service no longer uses it. Historical database pages and backups may retain older copies, so protecting those files is part of the security model.</p>
           </div>
         </div>
 
@@ -85,7 +85,7 @@
           <div class="n">5</div>
           <div>
             <h3>The trigger service</h3>
-            <p>A small service stores your signed envelopes and submits each one when its window opens. Before submitting it checks that the market currently gives at least your floor and that your wallet holds the USDC, because a transaction that fails on-chain still burns its slot. It cannot do anything else: it holds no keys that matter. You can <b>export</b> your signed envelopes at any time and submit them yourself if the service ever disappears.</p>
+            <p>A small service stores the channel-signed, hash-authorized envelopes and submits each one when its window opens. Before submitting it checks the market floor and your USDC balance, because a failed on-chain transaction burns its slot. It never holds your wallet key; when configured, it holds a separate treasury key for channel funding and fees. You can <b>export</b> the envelopes and submit them yourself if the service disappears.</p>
           </div>
         </div>
       </section>
@@ -96,22 +96,22 @@
         <ul class="sec-list">
           <li>cannot submit a purchase early: time bounds and <code>minSeqAge</code> are checked by consensus</li>
           <li>cannot run two purchases inside one period: <code>minSeqAge</code> again</li>
-          <li>cannot change the amount, asset, destination or floor: they are inside your signed hash (<code>tx_bad_auth</code> otherwise)</li>
-          <li>cannot touch anything else in your account: each signature covers exactly one operation</li>
-          <li>cannot create new transactions on the channel: its key no longer exists</li>
+          <li>cannot change the amount, asset, destination or floor: each exact hash is pre-authorized by the wallet setup (<code>tx_bad_auth</code> otherwise)</li>
+          <li>cannot touch anything else in your account: each pre-authorized purchase hash covers exactly one swap operation</li>
+          <li>cannot create new channel transactions from the active database after activation; backup key exposure remains a residual risk</li>
           <li class="worst">can at worst <i>fail to submit</i>, or pick a bad moment inside a window. No purchase happens, or you get a fill no worse than your floor.</li>
         </ul>
-        <p style="margin-top:12px">All of this was exercised on testnet: <a href="https://github.com/sud3naz/Damla/blob/main/docs/PROOF-testnet.md" target="_blank" rel="noopener">docs/PROOF-testnet.md</a> lists the rejected early submission, the rejected tampered envelope, four consecutive automatic purchases and the invalidated stale envelope, with hashes.</p>
+        <p style="margin-top:12px">The protocol checks were exercised on testnet: <a href="https://github.com/sud3naz/Damla/blob/main/docs/PROOF-testnet.md" target="_blank" rel="noopener">four consecutive purchases</a> show rejected early and tampered submissions, while <a href="https://github.com/sud3naz/Damla/blob/main/docs/PROOF-skip-testnet.md" target="_blank" rel="noopener">the deliberate-skip run</a> shows later purchases succeeding after a missed window, with on-chain hashes.</p>
       </section>
 
       <section id="cancel">
         <h2>Cancelling a plan</h2>
-        <p>Your USDC never leaves your wallet in advance, so cancelling is trivial: move or spend the USDC and future purchases simply wait for funds until their window closes. There is no lockup and nothing to withdraw. The plan page also has a <b>Stop</b> button that tells the service to stop submitting; the signed envelopes themselves stay valid inside their windows, which is why moving the USDC is the hard stop.</p>
+        <p>Your USDC never leaves your wallet in advance. <b>Stop</b> tells the service to submit the pre-authorized cleanup, removing unused signers and releasing their temporary XLM reserve. If the service is unavailable, remove those signers yourself in Freighter or Stellar Lab. An already exported purchase envelope remains usable until its signer is removed or its window closes.</p>
       </section>
 
       <section id="slippage">
         <h2>The floor (<code>destMin</code>)</h2>
-        <p>Because transactions are signed weeks in advance, the minimum amount of XLM you accept per purchase is fixed at signing time. Damla does not treat this as a slippage setting, because a DCA buyer <i>wants</i> to keep buying as the price moves. It is a <b>ceiling</b>: you choose how far above today's price you are still willing to buy (+10%, +25%, +50%). The floor is today's quote divided by that factor.</p>
+        <p>Because transaction hashes are authorized weeks in advance, the minimum amount of XLM you accept per purchase is fixed at setup time. Damla does not treat this as a slippage setting, because a DCA buyer <i>wants</i> to keep buying as the price moves. It is a <b>ceiling</b>: you choose how far above today's price you are still willing to buy (+10%, +25%, +50%). The floor is today's quote divided by that factor.</p>
         <p>If XLM rises past your ceiling, that purchase waits and, if the market does not come back within its two-period window, is skipped. Falling prices never block a purchase; you simply receive more XLM. The floor is also the hard bound on how badly any submission can fill, honest service or not.</p>
         <div class="note">Open design question, still: a floor fixed for 12 weeks is crude. A monthly re-sign cadence ("sign once a month, buy every week") is the likely next step. It changes nothing in the protocol layer, only how often the planner asks for signatures.</div>
       </section>
@@ -121,7 +121,7 @@
         <ul class="timeline">
           <li class="now"><b>Now</b>Planner, Freighter signing, trigger service, plan page, export. Testnet, with a 1-minute demo cadence and a testnet USDC helper.</li>
           <li><b>Next</b>Mainnet switch-on (a funded treasury for channel reserves), monthly re-sign option, e-mail or Telegram receipts.</li>
-          <li><b>Later</b>More pairs (EURC, yXLM), wallet-side batch signing when wallets support it, a self-hosted trigger you can run yourself.</li>
+          <li><b>Later</b>More pairs (EURC, yXLM), higher purchase counts through wallet-side batch signing if wallets support it, a self-hosted trigger you can run yourself.</li>
         </ul>
       </section>
     </div>

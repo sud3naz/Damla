@@ -1,4 +1,4 @@
-// Plan builder: quote, checks, build draft, sign each purchase with Freighter, activate.
+// Plan builder: one Freighter approval installs exact-hash purchase authorizations.
 (function () {
   var W = window.damlaWallet;
   var API = W.apiBase;
@@ -9,12 +9,27 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var PLANS_KEY = 'damla-plans';
+  var PENDING_KEY = 'damla-pending-authorization';
 
   function savedPlans() { try { return JSON.parse(localStorage.getItem(PLANS_KEY) || '[]'); } catch (e) { return []; } }
   function savePlan(p) {
     var all = savedPlans().filter(function (x) { return x.id !== p.id; });
     all.unshift(p);
     try { localStorage.setItem(PLANS_KEY, JSON.stringify(all.slice(0, 50))); } catch (e) {}
+  }
+  function pendingAuthorization() { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); } catch (e) { return null; } }
+  function savePending(p) { try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch (e) {} }
+  function clearPending() { try { localStorage.removeItem(PENDING_KEY); } catch (e) {} }
+
+  async function activateAuthorization(p) {
+    var response = await fetch(API + '/api/plans/' + p.id + '/authorize', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedXdr: p.signedXdr })
+    });
+    var plan = await response.json();
+    if (plan.error) throw new Error(plan.error);
+    savePlan({ id: plan.id, network: plan.network, user: plan.user, cancelToken: p.cancelToken, createdAt: plan.createdAt });
+    clearPending();
+    location.href = 'plan.html?id=' + plan.id;
   }
 
   function amount() { return Number($('amount').value) || 0; }
@@ -45,7 +60,7 @@
     var minP = MIN_PERIOD[W.network] || 3600;
     if (P < minP) return 'The shortest cadence on ' + W.network + ' is every ' + (minP >= 3600 ? (minP / 3600) + ' hour' : (minP / 60) + ' minute') + '.';
     if (P > MAX_PERIOD) return 'The longest cadence is every 90 days.';
-    if (n < 2 || n > 52) return 'Between 2 and 52 purchases.';
+    if (n < 2 || n > 18) return 'Between 2 and 18 purchases for one wallet approval.';
     var s = startTs();
     if (s && s > Math.floor(Date.now() / 1000) + 60 * 86400) return 'The first purchase can be at most 60 days out.';
     return null;
@@ -95,7 +110,7 @@
     var connected = Boolean(W.address);
     pv.innerHTML = [
       '<li class="' + (connected ? 'done' : '') + '"><span class="k">1</span><div><b>Connect Freighter.</b> ' + (connected ? 'Done.' : 'Top of the form.') + '</div></li>',
-      '<li><span class="k">2</span><div><b>Sign ' + n + ' transactions</b>, one per purchase. Freighter asks ' + n + ' times, in one sitting. Each one: <b>' + amt + ' USDC</b> → ' + each + '. Only the date differs.</div></li>',
+      '<li><span class="k">2</span><div><b>Approve once in Freighter.</b> Stellar records the exact hashes of ' + n + ' purchases: <b>' + amt + ' USDC</b> → ' + each + ' each. This temporarily reserves about <b>' + ((n + 1) * 0.5).toFixed(1) + ' XLM</b> in your wallet until the purchases run or the plan is stopped.</div></li>',
       '<li><span class="k">3</span><div><b>Walk away.</b> On each date the swap runs on Stellar\'s exchange and the XLM lands in your wallet. USDC leaves only at that moment.</div></li>',
       '<li><span class="k">4</span><div><b>Follow or stop</b> from your plan page. Stopping costs nothing; moving your USDC also stops it.</div></li>'
     ].join('');
@@ -105,7 +120,7 @@
     var show = Math.min(n, 5);
     for (var i = 0; i < show; i++) {
       var t = t0 + i * P;
-      rows.push('<li><span>#' + (i + 1) + (i === 0 && !startTs() ? ' · right after signing' : '') + '</span><b>' + fmtDate(t) + '</b></li>');
+      rows.push('<li><span>#' + (i + 1) + (i === 0 && !startTs() ? ' · about a minute after signing' : '') + '</span><b>' + fmtDate(t) + '</b></li>');
     }
     if (n > show) rows.push('<li class="more">+ ' + (n - show) + ' more, ' + esc(label()) + ', last one ' + fmtDate(t0 + (n - 1) * P) + '</li>');
     sc.innerHTML = rows.join('');
@@ -225,25 +240,42 @@
     state.busy = true; btn.disabled = true; state.signing = 1; renderStepper();
     try {
       await checkFreighterNetwork();
+      var pending = pendingAuthorization();
+      if (pending && pending.user === W.address && pending.network === W.network) {
+        setNote('Recovering your already signed authorization…');
+        try { await activateAuthorization(pending); return; }
+        catch (e) {
+          if (/expired|not found|does not await/.test(e.message || '')) clearPending();
+          else throw e;
+        }
+      }
       setNote('Building your plan…');
       var pr = problem();
       if (pr) throw new Error(pr);
-      var body = { network: W.network, user: W.address, amount: String(amount()), every: every(), unit: unit(), count: count(), ceiling: state.ceiling, start: startTs() };
+      var body = { network: W.network, user: W.address, amount: String(amount()), every: every(), unit: unit(), count: count(), ceiling: state.ceiling, start: startTs(), mode: 'single' };
       var draft = await fetch(API + '/api/plans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
       if (draft.error) throw new Error(draft.error);
-      var signed = [];
-      for (var i = 0; i < draft.txs.length; i++) {
-        var t = draft.txs[i];
-        setNote('Freighter: sign purchase ' + (i + 1) + ' of ' + draft.txs.length + '. Same amount each time, only the date differs.');
-        var s = await W.api.signTransaction(t.xdr, { networkPassphrase: W.passphrase(draft.network), address: W.address });
-        if (s.error) throw new Error('Purchase ' + (i + 1) + ': ' + (s.error.message || 'signing declined'));
-        signed.push({ idx: t.idx, xdr: s.signedTxXdr });
-      }
+      if (!draft.authorization) throw new Error('Server did not return a single-approval transaction.');
+      setNote('Checking every signed purchase against Stellar Horizon…');
+      var trustedQuote = await window.damlaReview.trustedQuote(body.network, body.amount);
+      var checked = window.damlaReview.verifyDraft(draft, body, { quoteXlm: trustedQuote.amount, now: trustedQuote.now });
+      var approved = window.confirm(
+        'Verify your one-signature plan:\n\n' + checked.count + ' purchases of ' + checked.amount + ' USDC each\n' +
+        'XLM goes to your wallet: ' + checked.user + '\n' +
+        'Minimum received each time: ' + checked.floorXlm + ' XLM\n' +
+        'First window: ' + new Date(checked.firstTime * 1000).toLocaleString() + '\n' +
+        'Interval: ' + (checked.periodSeconds / 60) + ' minutes\n' +
+        'Temporary wallet reserve: ' + checked.reserveXlm + ' XLM\n\n' +
+        'These values were decoded from all transaction XDRs and checked against Stellar Horizon. Continue to one Freighter signature?'
+      );
+      if (!approved) throw new Error('Plan authorization cancelled.');
+      setNote('Freighter: approve the exact transaction hashes for your plan (one confirmation).');
+      var s = await W.api.signTransaction(draft.authorization.xdr, { networkPassphrase: W.passphrase(draft.network), address: W.address });
+      if (s.error || !s.signedTxXdr) throw new Error(s.error ? (s.error.message || 'signing declined') : 'Freighter returned no signed transaction');
       setNote('Activating…');
-      var plan = await fetch(API + '/api/plans/' + draft.id + '/finalize', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signed: signed }) }).then(function (x) { return x.json(); });
-      if (plan.error) throw new Error(plan.error);
-      savePlan({ id: plan.id, network: plan.network, user: plan.user, cancelToken: draft.cancelToken, createdAt: plan.createdAt });
-      location.href = 'plan.html?id=' + plan.id;
+      var authorization = { id: draft.id, network: draft.network, user: W.address, signedXdr: s.signedTxXdr, cancelToken: draft.cancelToken };
+      savePending(authorization);
+      await activateAuthorization(authorization);
     } catch (e) {
       setNote(e.message || String(e), true);
     } finally { state.busy = false; btn.disabled = false; state.signing = 0; renderStepper(); }

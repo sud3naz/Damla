@@ -40,7 +40,7 @@ while (Date.now() < deadline) {
   if (buys.every((t) => t.status !== 'pending')) { console.log('hashes', buys.map((t) => t.hash)); break }
   await sleep(10000)
 }
-const ex = await j(`/api/plans/${draft.id}/export`)
+const ex = await j(`/api/plans/${draft.id}/export`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: draft.cancelToken }) })
 console.log('export ok:', ex.txs.length, 'envelopes')
 const cancel = await j(`/api/plans/${draft.id}/cancel`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: draft.cancelToken }) })
 console.log('cancel with token ->', cancel.status)

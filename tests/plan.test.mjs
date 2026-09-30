@@ -64,4 +64,7 @@ test('validateParams rejects bad input', () => {
   assert.throws(() => validateParams({ ...ok, amount: '1.12345678' }), /decimals/)
   assert.throws(() => validateParams({ ...ok, count: 1 }), /count/)
   assert.throws(() => validateParams({ ...ok, ceiling: 7 }), /ceiling/)
+  assert.throws(() => validateParams({ ...ok, unit: '__proto__' }), /unit/)
+  assert.throws(() => validateParams({ ...ok, unit: 'constructor' }), /unit/)
+  assert.throws(() => validateParams({ ...ok, network: '__proto__' }), /network/)
 })

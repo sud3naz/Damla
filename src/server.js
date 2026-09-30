@@ -3,7 +3,8 @@ import { readFile, stat } from 'node:fs/promises'
 import { extname, join, normalize } from 'node:path'
 import { Asset, Operation, StrKey, Transaction, TransactionBuilder } from '@stellar/stellar-sdk'
 import { LIMITS, NETWORKS, UNITS, SERVER, enabledNetworks } from './config.js'
-import { PlanError, cancelPlan, createDraft, exportPlan, finalize, publicPlan } from './plan.js'
+import { PlanError, abandonDraft, cancelPlan, createDraft, exportPlan, finalize, publicPlan } from './plan.js'
+import { authorizeSingle, recoverAuthorization } from './single.js'
 import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, server as horizon, submitXdr, usdcAsset } from './horizon.js'
 
 const SECURITY_HEADERS = {
@@ -80,7 +81,8 @@ function draftBudget(ip) {
 }
 
 function netFrom(q) {
-  const net = NETWORKS[q.get('network') || '']
+  const key = q.get('network') || ''
+  const net = Object.hasOwn(NETWORKS, key) ? NETWORKS[key] : null
   if (!net) throw new PlanError('unknown network')
   if (!enabledNetworks().includes(net.key)) throw new PlanError('network not enabled on this server', 503)
   return net
@@ -197,7 +199,7 @@ export function createServer(db, { webRoot } = {}) {
       return json(res, 201, draft, origin)
     }
 
-    const m = p.match(/^\/api\/plans\/([a-f0-9]{32})(?:\/(finalize|export|cancel))?$/)
+    const m = p.match(/^\/api\/plans\/([a-f0-9]{32})(?:\/(finalize|authorize|export|cancel))?$/)
     if (m) {
       const [, id, action] = m
       if (req.method === 'GET' && !action) {
@@ -215,9 +217,17 @@ export function createServer(db, { webRoot } = {}) {
         const body = await readJson(req, 1024 * 1024)
         return json(res, 200, finalize(db, id, body.signed), origin)
       }
+      if (req.method === 'POST' && action === 'authorize') {
+        const body = await readJson(req, 1024 * 1024)
+        return json(res, 200, await authorizeSingle(db, id, body.signedXdr), origin)
+      }
       if (req.method === 'POST' && action === 'cancel') {
         const body = await readJson(req)
-        return json(res, 200, cancelPlan(db, id, body.token), origin)
+        const before = publicPlan(db, id)
+        if (before?.status === 'authorizing') await recoverAuthorization(db, id, { submit: false })
+        const plan = cancelPlan(db, id, body.token)
+        if (plan.status === 'cleanup') await abandonDraft(db, id)
+        return json(res, 200, publicPlan(db, id), origin)
       }
     }
 

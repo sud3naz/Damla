@@ -43,7 +43,7 @@
       + '<div><span>Floor per purchase</span><b>' + num(buys[0] && buys[0].destMin, 4) + ' XLM</b> <i>(' + num(p.quoteXlm, 4) + ' at signing, ceiling +' + esc(p.ceiling) + '%)</i></div>'
       + '<div><span>Next</span><b>' + (next ? (next.minTime > now ? 'opens ' + fmt(next.minTime) : 'window open') : '—') + '</b></div>'
       + '<div><span>Wallet</span><b class="mono">' + esc(p.user) + '</b></div>'
-      + '<div><span>Channel</span><b class="mono"><a href="' + explorer + '/account/' + esc(p.channel) + '" target="_blank" rel="noopener">' + esc(p.channel) + '</a></b> <i>' + (p.channelKeyDestroyed ? 'key destroyed after signing' : 'key held until activation') + '</i></div>'
+      + '<div><span>Channel</span><b class="mono"><a href="' + explorer + '/account/' + esc(p.channel) + '" target="_blank" rel="noopener">' + esc(p.channel) + '</a></b> <i>' + (p.channelKeyDestroyed ? 'live key cleared after signing' : 'key held until activation or cleanup') + '</i></div>'
       + '</div></div>';
 
     var rows = buys.map(function (t) {
@@ -57,7 +57,7 @@
 
     var actions = '';
     if (mine && mine.cancelToken && p.status === 'active') actions += '<button class="mini" id="btn-cancel">Stop this plan</button> ';
-    if (mine && mine.cancelToken && p.status !== 'draft') actions += '<button class="mini" id="btn-export">Export signed envelopes</button> ';
+    if (mine && mine.cancelToken && p.status !== 'draft') actions += '<button class="mini" id="btn-export">Export authorized envelopes</button> ';
     if (!mine) actions += '<span class="dim small">Stop and export are only available on the device that created this plan.</span>';
 
     $('plan').innerHTML = head

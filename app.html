@@ -4,10 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Damla App</title>
-<meta name="description" content="Damla: non-custodial recurring XLM purchases on Stellar. Sign once, buy on a schedule, no smart contract.">
+<meta name="description" content="Damla: non-custodial recurring XLM purchases on Stellar. Sign the plan in one session, buy on a schedule, no smart contract.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 28'%3E%3Cpath d='M11 1 C11 1 20 12.5 20 18.5 a9 9 0 0 1 -18 0 C2 12.5 11 1 11 1 Z' fill='%231e88e5'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 <script src="vendor/freighter-api.min.js"></script>
+<script src="vendor/stellar-sdk.min.js"></script>
 <script src="config.js"></script>
 </head>
 <body>
@@ -69,9 +70,9 @@
           </div>
           <div class="hint" id="every-hint"></div>
 
-          <label for="count">How many purchases? <small>(2 to 52)</small></label>
+          <label for="count">How many purchases? <small>(2 to 18 with one wallet approval)</small></label>
           <div class="amount-row">
-            <input id="count" type="number" min="2" max="52" step="1" value="12" inputmode="numeric">
+            <input id="count" type="number" min="2" max="18" step="1" value="4" inputmode="numeric">
             <span class="unit">purchases</span>
           </div>
 
@@ -95,7 +96,7 @@
           </div>
 
           <div class="acct" id="acct"></div>
-          <button class="btn full big" id="sign">Sign plan</button>
+          <button class="btn full big" id="sign">Approve plan once</button>
           <div class="wallet" id="wallet-note"></div>
         </div>
 
@@ -120,6 +121,7 @@
   </div>
 </footer>
 <script src="script.js"></script>
+<script src="review.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

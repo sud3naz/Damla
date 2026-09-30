@@ -36,15 +36,16 @@ export function periodLabel(every, unit) {
 }
 
 export function validateParams(p, now = Math.floor(Date.now() / 1000)) {
-  const net = NETWORKS[p.network]
+  const net = Object.hasOwn(NETWORKS, p.network) ? NETWORKS[p.network] : null
   if (!net) throw new PlanError('unknown network')
   if (!StrKey.isValidEd25519PublicKey(p.user || '')) throw new PlanError('invalid user address')
-  const unit = UNITS[p.unit]
+  const unit = Object.hasOwn(UNITS, p.unit) ? UNITS[p.unit] : null
   if (!unit) throw new PlanError('unit must be one of minutes, hours, days, weeks')
   if (unit.testnetOnly && net.key !== 'testnet') throw new PlanError('minute cadence is testnet-only')
   const every = Number(p.every)
   if (!Number.isInteger(every) || every < 1 || every > 1000) throw new PlanError('"every" must be a whole number between 1 and 1000')
   const periodSeconds = every * unit.seconds
+  if (!Number.isSafeInteger(periodSeconds)) throw new PlanError('invalid cadence')
   const minP = LIMITS.minPeriodSeconds[net.key]
   if (periodSeconds < minP) throw new PlanError(`the shortest cadence on ${net.key} is every ${minP >= 3600 ? minP / 3600 + ' hour' : minP / 60 + ' minute'}`)
   if (periodSeconds > LIMITS.maxPeriodSeconds) throw new PlanError('the longest cadence is every 90 days')
@@ -97,7 +98,7 @@ export function schedule({ t0, periodSeconds, count }) {
 }
 
 /** Build (unsigned) transactions for a plan. Pure: no network access. */
-export function buildTransactions({ net, user, channelPub, startSeq, amount, destMin, t0, periodSeconds, count }) {
+export function buildTransactions({ net, user, channelPub, startSeq, amount, destMin, t0, periodSeconds, count, mode = 'individual' }) {
   const { windows, mergeMinTime } = schedule({ t0, periodSeconds, count })
   const usdc = usdcAsset(net)
   const S0 = BigInt(startSeq)
@@ -121,16 +122,34 @@ export function buildTransactions({ net, user, channelPub, startSeq, amount, des
   })
   const treasury = treasuryPublic(net)
   let merge = null
-  if (treasury) {
+  if (treasury || mode === 'single') {
     const src = new Account(channelPub, (S0 + BigInt(count)).toString())
-    const tx = new TransactionBuilder(src, { fee: String(net.baseFee), networkPassphrase: net.passphrase })
+    const b = new TransactionBuilder(src, { fee: String(net.baseFee), networkPassphrase: net.passphrase })
       .setMinAccountSequence(S0.toString())
-      .setTimebounds(mergeMinTime, 0)
-      .addOperation(Operation.accountMerge({ destination: treasury }))
-      .build()
-    merge = { idx: count + 1, kind: 'merge', minTime: mergeMinTime, maxTime: 0, minSeqAge: 0, seq: tx.sequence, hash: Buffer.from(tx.hash()).toString('hex'), tx }
+      .setTimebounds(mode === 'single' ? 0 : mergeMinTime, 0)
+    // A pre-authorized cleanup can run immediately on cancellation. It removes
+    // unused purchase signers, releasing the user's XLM reserve. Signers for
+    // purchases that ran already are absent; SetOptions(weight=0) is a no-op.
+    if (mode === 'single') {
+      for (const buy of txs) b.addOperation(Operation.setOptions({
+        source: user, signer: { preAuthTx: buy.hash, weight: 0 },
+      }))
+    }
+    if (treasury) b.addOperation(Operation.accountMerge({ destination: treasury }))
+    const tx = b.build()
+    merge = { idx: count + 1, kind: 'merge', minTime: mode === 'single' ? 0 : mergeMinTime, maxTime: 0, minSeqAge: 0, seq: tx.sequence, hash: Buffer.from(tx.hash()).toString('hex'), tx }
   }
   return { txs, merge }
+}
+
+/** One wallet signature authorizes the exact hashes of every purchase and cleanup. */
+export function buildSingleSetup({ net, user, userSeq, hashes, weight, now }) {
+  const expiresAt = now + 20 * 60
+  const b = new TransactionBuilder(new Account(user, userSeq), { fee: String(net.baseFee), networkPassphrase: net.passphrase })
+    .setTimebounds(0, expiresAt)
+  for (const hash of hashes) b.addOperation(Operation.setOptions({ signer: { preAuthTx: hash, weight } }))
+  const tx = b.build()
+  return { tx, hash: Buffer.from(tx.hash()).toString('hex'), expiresAt }
 }
 
 /** raw 64-byte ed25519 signature from a DecoratedSignature (SDK 17 wraps it) */
@@ -150,57 +169,85 @@ export function hashToken(t) { return createHash('sha256').update(t).digest('hex
  */
 export async function createDraft(db, params, now = Math.floor(Date.now() / 1000)) {
   const { net, every, unit, periodSeconds, label, amount, count, ceiling, t0 } = validateParams(params, now)
+  const mode = params.mode === 'single' ? 'single' : 'individual'
+  if (mode === 'single' && count > 18) throw new PlanError('single-approval plans support at most 18 purchases (Stellar signer limit)')
   const user = params.user
 
   const userAcct = await loadAccountOrNull(net, user)
   if (!userAcct) throw new PlanError('user account does not exist on this network')
+  let signerWeight = 0
+  let reserveXlm = 0
+  if (mode === 'single') {
+    if ((userAcct.signers?.length || 0) + count + 1 > 20) throw new PlanError('not enough free signer slots for a single-approval plan (20 maximum)')
+    const master = userAcct.signers?.find((s) => s.key === user)
+    const high = Number(userAcct.thresholds?.high_threshold || 0)
+    const medium = Number(userAcct.thresholds?.med_threshold || 0)
+    if (!master || Number(master.weight) < high) throw new PlanError('this wallet cannot authorize the signer setup alone; use a standard single-key Stellar account')
+    signerWeight = Math.max(1, high, medium)
+    reserveXlm = 0.5 * (count + 1)
+    const native = userAcct.balances.find((b) => b.asset_type === 'native')
+    const currentReserve = 0.5 * (2 + Number(userAcct.subentry_count || 0) + Number(userAcct.num_sponsoring || 0) - Number(userAcct.num_sponsored || 0))
+    if (Number(native?.balance || 0) - Number(native?.selling_liabilities || 0) < currentReserve + reserveXlm + 0.01)
+      throw new PlanError(`single approval needs ${reserveXlm.toFixed(1)} XLM of temporary signer reserve in the wallet; add XLM or reduce purchases`)
+  }
   const trust = userAcct.balances.find((b) => b.asset_code === net.usdc.code && b.asset_issuer === net.usdc.issuer)
   if (!trust) throw new PlanError('user account has no USDC trustline')
   if (Number(trust.balance) < Number(amount)) throw new PlanError(`user holds ${trust.balance} USDC, the first purchase needs ${amount}`)
-  const openDrafts = db.prepare("SELECT id FROM plans WHERE user = ? AND status = 'draft'").all(user)
-  for (const d of openDrafts) await abandonDraft(db, d.id, now) // one open draft per user; its channel is merged back
-
   const quote = await quoteStrictSend(net, amount)
   if (!quote) throw new PlanError('no direct XLM/USDC market for this amount right now', 503)
   const destMin = floorFromQuote(quote, ceiling)
 
-  const channel = Keypair.random()
-  if (net.treasurySecret) await fundFromTreasury(net, channel.publicKey())
-  else if (net.friendbot) await friendbot(net, channel.publicKey())
-  else throw new PlanError('network not enabled on this server', 503)
-  const chAcct = await server(net).loadAccount(channel.publicKey())
-  const startSeq = chAcct.sequenceNumber()
-
-  const built = buildTransactions({
-    net, user, channelPub: channel.publicKey(), startSeq, amount, destMin, t0, periodSeconds, count,
-  })
-  const all = built.merge ? [...built.txs, built.merge] : built.txs
-  for (const t of all) t.tx.sign(channel)
-
   const id = newPlanId()
   const cancelToken = newCancelToken()
+  const channel = Keypair.random()
   const ins = db.prepare(`INSERT INTO plans (id, network, user, channel, channel_secret, cancel_hash, amount, period, period_seconds, count, ceiling, quote_xlm, start_seq, t0, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)`)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'funding', ?)`)
   const insTx = db.prepare(`INSERT INTO txs (plan_id, idx, kind, hash, seq, min_time, max_time, min_seq_age, dest_min, xdr, signed, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-  db.exec('BEGIN')
+  // Persist the recovery key before the network funds the channel. A crash or
+  // failed build after funding must not strand an account whose key lived only
+  // in this request's memory.
+  ins.run(id, net.key, user, channel.publicKey(), channel.secret(), hashToken(cancelToken), amount, `${every} ${unit}`, periodSeconds, count, ceiling, quote, '', t0, now)
+  db.prepare('UPDATE plans SET mode = ? WHERE id = ?').run(mode, id)
+  let funded = false
+  let inTransaction = false
   try {
-    ins.run(id, net.key, user, channel.publicKey(), channel.secret(), hashToken(cancelToken), amount, `${every} ${unit}`, periodSeconds, count, ceiling, quote, startSeq, t0, now)
+    if (net.treasurySecret) await fundFromTreasury(net, channel.publicKey())
+    else if (net.friendbot) await friendbot(net, channel.publicKey())
+    else throw new PlanError('network not enabled on this server', 503)
+    funded = true
+    const chAcct = await server(net).loadAccount(channel.publicKey())
+    const startSeq = chAcct.sequenceNumber()
+    const built = buildTransactions({
+      net, user, channelPub: channel.publicKey(), startSeq, amount, destMin, t0, periodSeconds, count, mode,
+    })
+    const all = built.merge ? [...built.txs, built.merge] : built.txs
+    for (const t of all) t.tx.sign(channel)
+    const setup = mode === 'single' ? buildSingleSetup({
+      net, user, userSeq: userAcct.sequenceNumber(), hashes: all.map((t) => t.hash), weight: signerWeight, now,
+    }) : null
+    db.exec('BEGIN')
+    inTransaction = true
     for (const t of all) {
       insTx.run(id, t.idx, t.kind, t.hash, t.seq, t.minTime, t.maxTime, t.minSeqAge, t.kind === 'buy' ? destMin : null, t.tx.toXDR(), t.kind === 'merge' ? 1 : 0, 'pending')
     }
+    db.prepare("UPDATE plans SET status = 'draft', start_seq = ? WHERE id = ?").run(startSeq, id)
+    if (setup) db.prepare('UPDATE plans SET setup_hash = ?, setup_xdr = ? WHERE id = ?').run(setup.hash, setup.tx.toXDR(), id)
     db.exec('COMMIT')
-  } catch (e) { db.exec('ROLLBACK'); throw e }
-
-  return {
-    id,
-    cancelToken,
-    network: net.key,
-    user,
-    channel: channel.publicKey(),
-    amount, period: `${every} ${unit}`, periodLabel: label, periodSeconds, count, ceiling,
-    quoteXlm: quote, destMin, t0, startSeq,
-    txs: built.txs.map((t) => ({ idx: t.idx, hash: t.hash, seq: t.seq, minTime: t.minTime, maxTime: t.maxTime, minSeqAge: t.minSeqAge, xdr: t.tx.toXDR() })),
+    inTransaction = false
+    return {
+      id, cancelToken, network: net.key, user, channel: channel.publicKey(),
+      amount, period: `${every} ${unit}`, periodLabel: label, periodSeconds, count, ceiling,
+      quoteXlm: quote, destMin, t0, startSeq,
+      mode, authorization: setup ? { xdr: setup.tx.toXDR(), hash: setup.hash, expiresAt: setup.expiresAt, reserveXlm } : null,
+      txs: built.txs.map((t) => ({ idx: t.idx, hash: t.hash, seq: t.seq, minTime: t.minTime, maxTime: t.maxTime, minSeqAge: t.minSeqAge, xdr: t.tx.toXDR() })),
+      cleanup: mode === 'single' ? { hash: built.merge.hash, xdr: built.merge.tx.toXDR() } : null,
+    }
+  } catch (e) {
+    if (inTransaction) { try { db.exec('ROLLBACK') } catch {} }
+    db.prepare("UPDATE plans SET status = 'cleanup', next_check_at = ? WHERE id = ?").run(now + (funded ? 0 : 60), id)
+    if (funded) await abandonDraft(db, id, now)
+    throw e
   }
 }
 
@@ -211,27 +258,40 @@ export async function createDraft(db, params, now = Math.floor(Date.now() / 1000
  */
 export async function abandonDraft(db, planId, now = Math.floor(Date.now() / 1000)) {
   const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(planId)
-  if (!plan || plan.status !== 'draft') return
+  if (!plan || !['draft', 'funding', 'cleanup'].includes(plan.status)) return
   const net = NETWORKS[plan.network]
   const treasury = treasuryPublic(net)
+  let note = treasury ? 'channel merged back to treasury' : 'friendbot-funded draft abandoned'
   if (plan.channel_secret && treasury) {
     try {
       const kp = Keypair.fromSecret(plan.channel_secret)
-      const acct = await server(net).loadAccount(kp.publicKey())
-      const tx = new TransactionBuilder(acct, { fee: String(net.baseFee * 10), networkPassphrase: net.passphrase })
-        .addOperation(Operation.accountMerge({ destination: treasury }))
-        .setTimeout(120).build()
-      tx.sign(kp)
-      await server(net).submitTransaction(tx)
+      const acct = await loadAccountOrNull(net, kp.publicKey())
+      if (!acct && now - plan.created_at < 300) {
+        // A funding request can time out after Horizon accepts it. Give the
+        // account time to appear before discarding its only recovery key.
+        db.prepare("UPDATE plans SET status = 'cleanup', next_check_at = ?, note = ? WHERE id = ?")
+          .run(now + 60, 'waiting for channel funding to settle', planId)
+        return
+      }
+      if (acct) {
+        const tx = new TransactionBuilder(acct, { fee: String(net.baseFee * 10), networkPassphrase: net.passphrase })
+          .addOperation(Operation.accountMerge({ destination: treasury }))
+          .setTimeout(120).build()
+        tx.sign(kp)
+        await server(net).submitTransaction(tx)
+      } else note = 'channel account absent after cleanup window'
     } catch (err) {
-      // best effort: the pre-signed merge still recovers the reserve after the plan's last window
       console.error(`[${planId.slice(0, 8)}] abandon merge failed: ${resultCodes(err).tx || err.message}`)
+      db.prepare("UPDATE plans SET status = 'cleanup', next_check_at = ?, note = ? WHERE id = ?")
+        .run(now + 60, 'channel merge pending retry', planId)
+      return
     }
   }
   db.exec('BEGIN')
   try {
-    db.prepare("UPDATE plans SET status = 'abandoned', channel_secret = NULL, ended_at = ? WHERE id = ?").run(now, planId)
+    db.prepare("UPDATE plans SET status = 'abandoned', channel_secret = NULL, note = ?, ended_at = ? WHERE id = ?").run(note, now, planId)
     db.prepare("UPDATE txs SET status = 'cancelled' WHERE plan_id = ? AND kind = 'buy'").run(planId)
+    db.prepare("UPDATE txs SET status = 'superseded', note = 'channel merged during draft cleanup' WHERE plan_id = ? AND kind = 'merge' AND status = 'pending'").run(planId)
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); throw e }
 }
@@ -243,6 +303,7 @@ export async function abandonDraft(db, planId, now = Math.floor(Date.now() / 100
 export function finalize(db, planId, signed) {
   const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(planId)
   if (!plan) throw new PlanError('plan not found', 404)
+  if (plan.mode === 'single') throw new PlanError('use the single-authorization endpoint for this plan')
   if (plan.status !== 'draft') throw new PlanError(`plan is ${plan.status}, not a draft`)
   const net = NETWORKS[plan.network]
   const rows = db.prepare("SELECT * FROM txs WHERE plan_id = ? AND kind = 'buy' ORDER BY idx").all(planId)
@@ -294,6 +355,8 @@ export function publicPlan(db, planId) {
     user: plan.user,
     channel: plan.channel,
     channelKeyDestroyed: plan.channel_secret === null,
+    mode: plan.mode,
+    authorizationHash: plan.mode === 'single' ? plan.setup_hash : null,
     amount: plan.amount,
     period: plan.period,
     periodLabel: labelFromStored(plan.period),
@@ -321,6 +384,9 @@ export function exportPlan(db, planId, token) {
   if (!plan || plan.status === 'draft') return null
   if (typeof token !== 'string' || hashToken(token) !== plan.cancel_hash) throw new PlanError('bad plan token', 403)
   const txs = db.prepare("SELECT * FROM txs WHERE plan_id = ? AND kind = 'buy' ORDER BY idx").all(planId)
+  const cleanup = plan.mode === 'single'
+    ? db.prepare("SELECT hash, xdr, status FROM txs WHERE plan_id = ? AND kind = 'merge'").get(planId)
+    : null
   const net = NETWORKS[plan.network]
   return {
     damla: 'plan-export-v1',
@@ -329,8 +395,11 @@ export function exportPlan(db, planId, token) {
     horizon: net.horizon,
     user: plan.user,
     channel: plan.channel,
-    note: 'Each envelope is fully signed. Anyone can submit it, only inside its time window; nobody can change it.',
+    note: plan.mode === 'single'
+      ? 'Each envelope has the channel signature and is authorized by its exact preAuthTx hash on the user account. Anyone holding it may submit it within its window; nobody can change it.'
+      : 'Each envelope is fully signed. Anyone can submit it, only inside its time window; nobody can change it.',
     txs: txs.map((t) => ({ idx: t.idx, hash: t.hash, minTime: t.min_time, maxTime: t.max_time, status: t.status, xdr: t.xdr })),
+    cleanup: cleanup ? { hash: cleanup.hash, xdr: cleanup.xdr, status: cleanup.status } : null,
   }
 }
 
@@ -339,11 +408,13 @@ export function cancelPlan(db, planId, token) {
   if (!plan) throw new PlanError('plan not found', 404)
   if (typeof token !== 'string' || hashToken(token) !== plan.cancel_hash) throw new PlanError('bad cancel token', 403)
   if (['done', 'cancelled'].includes(plan.status)) return publicPlan(db, planId)
+  if (plan.status === 'authorizing') throw new PlanError('wallet authorization is being reconciled; retry cancellation shortly', 409)
   const now = Math.floor(Date.now() / 1000)
   db.exec('BEGIN')
   try {
-    db.prepare("UPDATE plans SET status = 'cancelled', ended_at = ? WHERE id = ?").run(now, planId)
-    db.prepare("UPDATE txs SET status = 'cancelled' WHERE plan_id = ? AND kind = 'buy' AND status = 'pending'").run(planId)
+    const draft = ['draft', 'funding', 'cleanup'].includes(plan.status)
+    db.prepare("UPDATE plans SET status = ?, next_check_at = 0, ended_at = ? WHERE id = ?").run(draft ? 'cleanup' : 'cancelled', now, planId)
+    db.prepare("UPDATE txs SET status = 'cancelled' WHERE plan_id = ? AND kind = 'buy' AND status = 'pending' AND attempts = 0").run(planId)
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); throw e }
   return publicPlan(db, planId)
