@@ -229,7 +229,7 @@ export function createServer(db, { webRoot, isSubmitting = () => false } = {}) {
         const body = await readJson(req)
         const before = publicPlan(db, id)
         if (before?.status === 'authorizing') await recoverAuthorization(db, id, { submit: false })
-        const plan = cancelPlan(db, id, body.token, { isSubmitting })
+        const plan = cancelPlan(db, id, body.token, { isSubmitting, unsignedOnly: body.unsignedOnly === true })
         if (plan.status === 'cleanup') await abandonDraft(db, id)
         return json(res, 200, publicPlan(db, id), origin)
       }

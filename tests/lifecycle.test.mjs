@@ -85,7 +85,7 @@ test('cancelling a treasury-funded unsigned draft recovers the channel immediate
     const params = { network: 'testnet', user: user.publicKey(), amount: '5', every: 1, unit: 'minutes', count: 2, ceiling: 25 }
     const draft = await createDraft(db, params)
     assert.equal(submissions, 1, 'the treasury funded one channel')
-    assert.equal(cancelPlan(db, draft.id, draft.cancelToken).status, 'cleanup')
+    assert.equal(cancelPlan(db, draft.id, draft.cancelToken, { unsignedOnly: true }).status, 'cleanup')
     await abandonDraft(db, draft.id)
     assert.equal(submissions, 2, 'cleanup submitted an immediate merge')
     const plan = db.prepare('SELECT status, channel_secret FROM plans WHERE id = ?').get(draft.id)

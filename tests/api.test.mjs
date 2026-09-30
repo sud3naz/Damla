@@ -4,6 +4,7 @@ import { Keypair } from '@stellar/stellar-sdk'
 import { NETWORKS } from '../src/config.js'
 import { openDb } from '../src/db.js'
 import { server as horizon } from '../src/horizon.js'
+import { hashToken, newCancelToken, newPlanId } from '../src/plan.js'
 import { createServer } from '../src/server.js'
 
 const db = openDb(':memory:')
@@ -21,6 +22,22 @@ test('health lists enabled networks', async () => {
 test('unknown plan is 404, bad ids do not match', async () => {
   assert.equal((await fetch(`${base}/api/plans/${'a'.repeat(32)}`)).status, 404)
   assert.equal((await fetch(`${base}/api/plans/zzz`)).status, 404)
+})
+
+test('unsigned cleanup cannot stop a plan that became active', async () => {
+  const id = newPlanId(), token = newCancelToken(), wallet = Keypair.random().publicKey()
+  const now = Math.floor(Date.now() / 1000)
+  db.prepare(`INSERT INTO plans (id, network, user, channel, cancel_hash, amount, period,
+    period_seconds, count, ceiling, quote_xlm, start_seq, t0, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, 'testnet', wallet, Keypair.random().publicKey(), hashToken(token), '1', '1 hours', 3600, 2, 10, '4', '1', now, 'active', now)
+  const response = await fetch(`${base}/api/plans/${id}/cancel`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token, unsignedOnly: true }),
+  })
+  assert.equal(response.status, 409)
+  assert.match((await response.json()).error, /no longer an unsigned draft/)
+  assert.equal(db.prepare('SELECT status FROM plans WHERE id = ?').get(id).status, 'active')
 })
 
 test('cors: unknown origins get no allow header, known ones do', async () => {

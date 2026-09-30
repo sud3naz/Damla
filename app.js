@@ -12,6 +12,7 @@
 
   var PLANS_KEY = 'damla-plans';
   var PENDING_KEY = 'damla-pending-authorization';
+  var UNSIGNED_KEY = 'damla-unsigned-draft';
 
   function savedPlans() { try { return JSON.parse(localStorage.getItem(PLANS_KEY) || '[]'); } catch (e) { return []; } }
   function savePlan(p) {
@@ -22,6 +23,25 @@
   function pendingAuthorization() { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); } catch (e) { return null; } }
   function savePending(p) { try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch (e) {} }
   function clearPending() { try { localStorage.removeItem(PENDING_KEY); } catch (e) {} }
+  function unsignedDraft() { try { return JSON.parse(localStorage.getItem(UNSIGNED_KEY) || 'null'); } catch (e) { return null; } }
+  function saveUnsignedDraft(p) { try { localStorage.setItem(UNSIGNED_KEY, JSON.stringify(p)); } catch (e) {} }
+  function clearUnsignedDraft() { try { localStorage.removeItem(UNSIGNED_KEY); } catch (e) {} }
+
+  async function cancelUnsignedDraft(p) {
+    if (!p || !/^[a-f0-9]{32}$/.test(p.id) || !p.cancelToken) { clearUnsignedDraft(); return; }
+    var url = API + '/api/plans/' + p.id;
+    var statusResponse = await fetch(url);
+    var status = await statusResponse.json();
+    if (statusResponse.status === 404) { clearUnsignedDraft(); return; }
+    if (!statusResponse.ok) throw new Error(status.error || 'Could not check the previous draft');
+    if (['draft', 'funding', 'cleanup'].indexOf(status.status) < 0) { clearUnsignedDraft(); return; }
+    var response = await fetch(url + '/cancel', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: p.cancelToken, unsignedOnly: true })
+    });
+    var result = await response.json();
+    if (!response.ok || result.status !== 'abandoned') throw new Error(result.error || 'Draft cleanup is still pending; retry shortly');
+    clearUnsignedDraft();
+  }
 
   async function activateAuthorization(p) {
     var response = await fetch(API + '/api/plans/' + p.id + '/authorize', {
@@ -257,6 +277,8 @@
     if (!W.address) { await W.connect(); if (!W.address) { setNote(T('dyn.action.connect'), true); return; } }
     var btn = $('sign');
     state.busy = true; btn.disabled = true; state.signing = 1; renderStepper();
+    var draft = null;
+    var signed = false;
     try {
       await checkFreighterNetwork();
       var pending = pendingAuthorization();
@@ -268,12 +290,18 @@
           else throw e;
         }
       }
+      var previous = unsignedDraft();
+      if (previous && previous.user === W.address && previous.network === W.network) {
+        setNote(T('dyn.action.recover'));
+        await cancelUnsignedDraft(previous);
+      }
       setNote(T('dyn.action.build'));
       var pr = problem();
       if (pr) throw new Error(pr);
       var body = { network: W.network, user: W.address, amount: String(amount()), every: every(), unit: unit(), count: count(), ceiling: state.ceiling, start: startTs(), mode: 'single' };
-      var draft = await fetch(API + '/api/plans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
+      draft = await fetch(API + '/api/plans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
       if (draft.error) throw new Error(draft.error);
+      saveUnsignedDraft({ id: draft.id, cancelToken: draft.cancelToken, network: W.network, user: W.address });
       if (!draft.authorization) throw new Error(T('dyn.action.noauth'));
       setNote(T('dyn.action.check'));
       var trustedQuote = await window.damlaReview.trustedQuote(body.network, body.amount);
@@ -287,12 +315,19 @@
       setNote(T('dyn.action.sign'));
       var s = await W.api.signTransaction(draft.authorization.xdr, { networkPassphrase: W.passphrase(draft.network), address: W.address });
       if (s.error || !s.signedTxXdr) throw new Error(s.error ? (s.error.message || T('dyn.sign.declined')) : T('dyn.sign.noresponse'));
+      signed = true;
+      clearUnsignedDraft();
       setNote(T('dyn.action.activate'));
       var authorization = { id: draft.id, network: draft.network, user: W.address, signedXdr: s.signedTxXdr, cancelToken: draft.cancelToken };
       savePending(authorization);
       await activateAuthorization(authorization);
     } catch (e) {
-      setNote(e.message || String(e), true);
+      var message = e.message || String(e);
+      if (draft && draft.id && !signed) {
+        try { await cancelUnsignedDraft(draft); }
+        catch (cleanupError) { message += ' · ' + (cleanupError.message || String(cleanupError)); }
+      }
+      setNote(message, true);
     } finally { state.busy = false; btn.disabled = Boolean(problem()) || !netEnabled(); state.signing = 0; renderStepper(); }
   }
 

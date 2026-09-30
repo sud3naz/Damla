@@ -422,10 +422,13 @@ export function exportPlan(db, planId, token) {
   }
 }
 
-export function cancelPlan(db, planId, token, { isSubmitting = () => false } = {}) {
+export function cancelPlan(db, planId, token, { isSubmitting = () => false, unsignedOnly = false } = {}) {
   const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(planId)
   if (!plan) throw new PlanError('plan not found', 404)
   if (typeof token !== 'string' || hashToken(token) !== plan.cancel_hash) throw new PlanError('bad cancel token', 403)
+  if (unsignedOnly && plan.status === 'abandoned') return publicPlan(db, planId)
+  if (unsignedOnly && !['draft', 'funding', 'cleanup'].includes(plan.status))
+    throw new PlanError('plan is no longer an unsigned draft', 409)
   if (isSubmitting(planId)) throw new PlanError('a purchase is being submitted; retry stopping this plan shortly', 409)
   if (['done', 'cancelled'].includes(plan.status)) return publicPlan(db, planId)
   if (plan.status === 'authorizing') throw new PlanError('wallet authorization is being reconciled; retry cancellation shortly', 409)
