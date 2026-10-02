@@ -65,6 +65,8 @@ test('cors: unknown origins get no allow header, known ones do', async () => {
   assert.equal(a.headers.get('access-control-allow-origin'), null)
   const b = await fetch(`${base}/api/health`, { headers: { origin: 'https://damla-lake.vercel.app' } })
   assert.equal(b.headers.get('access-control-allow-origin'), 'https://damla-lake.vercel.app')
+  const c = await fetch(`${base}/api/health`, { headers: { origin: 'https://damla.website' } })
+  assert.equal(c.headers.get('access-control-allow-origin'), 'https://damla.website')
 })
 
 test('plan creation validates before touching the network', async () => {

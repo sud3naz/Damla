@@ -61,7 +61,7 @@ export const SERVER = {
   port: Number(env.PORT || 8944),
   dbPath: env.DAMLA_DB || './damla.db',
   serveStatic: env.DAMLA_SERVE_STATIC === '1',
-  corsOrigins: (env.DAMLA_CORS || 'https://damla-lake.vercel.app,http://localhost:8944,http://127.0.0.1:8944')
+  corsOrigins: (env.DAMLA_CORS || 'https://damla.website,https://www.damla.website,https://damla-lake.vercel.app,http://localhost:8944,http://127.0.0.1:8944')
     .split(',').map((s) => s.trim()).filter(Boolean),
 }
 

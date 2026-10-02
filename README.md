@@ -2,7 +2,7 @@
 
 **Non-custodial recurring XLM purchases on Stellar. No smart contract. Sign in one sitting.**
 
-🌐 **Live (testnet):** [damla-lake.vercel.app](https://damla-lake.vercel.app) · 📖 **Docs:** [damla-lake.vercel.app/docs.html](https://damla-lake.vercel.app/docs.html) · ❓ **FAQ:** [damla-lake.vercel.app/faq.html](https://damla-lake.vercel.app/faq.html) · ✅ **Testnet proof:** [docs/PROOF-testnet.md](docs/PROOF-testnet.md)
+🌐 **Live (mainnet pilot):** [damla.website](https://damla.website) · 📖 **Docs:** [damla.website/docs.html](https://damla.website/docs.html) · ❓ **FAQ:** [damla.website/faq.html](https://damla.website/faq.html) · ✅ **Testnet proof:** [docs/PROOF-testnet.md](docs/PROOF-testnet.md)
 
 An additional four-purchase run with a deliberately skipped second purchase is recorded in [docs/PROOF-skip-testnet.md](docs/PROOF-skip-testnet.md). The application now uses one Freighter approval to install exact-hash pre-authorizations; [docs/PROOF-single-testnet.md](docs/PROOF-single-testnet.md) records the new path.
 
