@@ -148,6 +148,7 @@ window.DAMLA_TRANSLATIONS = (function () {
     ['dyn.account.trustline','No USDC trustline.','USDC trustline yok.','Pas de trustline USDC.','No hay trustline de USDC.','Keine USDC-Trustline.'],
     ['dyn.account.addtrust','Add USDC trustline','USDC trustline ekle','Ajouter une trustline USDC','Añadir trustline USDC','USDC-Trustline hinzufügen'],
     ['dyn.account.gettest','Get 100 test USDC','100 test USDC al','Obtenir 100 USDC test','Obtener 100 USDC de prueba','100 Test-USDC erhalten'],
+    ['dyn.account.enough','Your wallet already has enough USDC for one purchase.','Cüzdanında bir alım için yeterli USDC zaten var.','Votre portefeuille possède déjà assez d’USDC pour un achat.','Tu cartera ya tiene suficiente USDC para una compra.','Deine Wallet hat bereits genug USDC für einen Kauf.'],
     ['dyn.account.testnote','via the testnet exchange','test ağı borsasıyla','via la bourse testnet','a través del mercado de prueba','über die Testnetz-Börse'],
     ['dyn.preview.connect','Connect Freighter','Freighter’a bağlan','Connectez Freighter','Conecta Freighter','Freighter verbinden'],
     ['dyn.preview.approve','Approve {count} exact purchases with one wallet signature.','{count} kesin alımı tek cüzdan imzasıyla onayla.','Approuvez {count} achats exacts avec une signature.','Aprueba {count} compras exactas con una firma.','Bestätige {count} genaue Käufe mit einer Signatur.'],

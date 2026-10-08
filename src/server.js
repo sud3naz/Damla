@@ -5,7 +5,7 @@ import { Asset, Operation, StrKey, Transaction, TransactionBuilder } from '@stel
 import { LIMITS, NETWORKS, UNITS, SERVER, enabledNetworks } from './config.js'
 import { PlanError, abandonDraft, cancelPlan, createDraft, exportPlan, finalize, publicPlan } from './plan.js'
 import { authorizeSingle, recoverAuthorization } from './single.js'
-import { balances, loadAccountOrNull, quoteStrictSend, resultCodes, server as horizon, submitXdr, usdcAsset } from './horizon.js'
+import { balances, loadAccountOrNull, quoteStrictReceive, quoteStrictSend, resultCodes, server as horizon, submitXdr, usdcAsset } from './horizon.js'
 
 const SECURITY_HEADERS = {
   'x-content-type-options': 'nosniff',
@@ -86,6 +86,30 @@ function netFrom(q) {
   if (!net) throw new PlanError('unknown network')
   if (!enabledNetworks().includes(net.key)) throw new PlanError('network not enabled on this server', 503)
   return net
+}
+
+function toStroops(amount) {
+  const match = /^(\d+)(?:\.(\d{1,7}))?$/.exec(String(amount))
+  if (!match) throw new PlanError('invalid testnet market quote', 503)
+  return BigInt(match[1]) * 10_000_000n + BigInt((match[2] || '').padEnd(7, '0'))
+}
+
+function fromStroops(amount) {
+  return `${amount / 10_000_000n}.${(amount % 10_000_000n).toString().padStart(7, '0')}`
+}
+
+/** Cap a testnet helper swap at the live direct quote and the account's spendable XLM. */
+export function testUsdcSendMax(account, quotedXlm, feeStroops) {
+  const native = account.balances.find((balance) => balance.asset_type === 'native')
+  if (!native) throw new PlanError('not enough test XLM for 100 test USDC')
+  const baseReserve = 5_000_000n // Stellar's 0.5 XLM base reserve
+  const entries = 2 + Number(account.subentry_count || 0) + Number(account.num_sponsoring || 0) - Number(account.num_sponsored || 0)
+  const minimum = BigInt(Math.max(0, entries)) * baseReserve
+  const available = toStroops(native.balance) - toStroops(native.selling_liabilities || '0') - minimum - BigInt(feeStroops) - 10_000_000n // 1 XLM cushion
+  const quote = toStroops(quotedXlm)
+  if (quote <= 0n || available < quote) throw new PlanError(`not enough test XLM for 100 test USDC; market quote is ${quotedXlm} XLM`)
+  const withSlippage = (quote * 110n + 99n) / 100n // at most 10% above the current quote
+  return fromStroops(withSlippage < available ? withSlippage : available)
 }
 
 export function createServer(db, { webRoot, isSubmitting = () => false } = {}) {
@@ -170,12 +194,16 @@ export function createServer(db, { webRoot, isSubmitting = () => false } = {}) {
       const address = q.get('address') || ''
       if (!StrKey.isValidEd25519PublicKey(address)) throw new PlanError('bad address')
       const acct = await horizon(net).loadAccount(address)
+      if (!balances(acct, net).usdcTrustline) throw new PlanError('set up the test USDC trustline first')
+      const quotedXlm = await quoteStrictReceive(net, '100')
+      if (!quotedXlm) throw new PlanError('no direct testnet XLM/USDC liquidity right now', 503)
+      const sendMax = testUsdcSendMax(acct, quotedXlm, net.baseFee * 10)
       const tx = new TransactionBuilder(acct, { fee: String(net.baseFee * 10), networkPassphrase: net.passphrase })
         .addOperation(Operation.pathPaymentStrictReceive({
-          sendAsset: Asset.native(), sendMax: '5000', destination: address, destAsset: usdcAsset(net), destAmount: '100', path: [],
+          sendAsset: Asset.native(), sendMax, destination: address, destAsset: usdcAsset(net), destAmount: '100', path: [],
         }))
         .setTimeout(300).build()
-      return json(res, 200, { xdr: tx.toXDR(), networkPassphrase: net.passphrase, note: 'buys 100 test USDC on the testnet DEX with up to 5000 test XLM' }, origin)
+      return json(res, 200, { xdr: tx.toXDR(), networkPassphrase: net.passphrase, note: `buys 100 test USDC on the testnet DEX; current quote ${quotedXlm} XLM, maximum ${sendMax} XLM` }, origin)
     }
     if (req.method === 'POST' && p === '/api/helper/submit') {
       const body = await readJson(req)

@@ -80,6 +80,22 @@ export async function quoteStrictSend(net, amount) {
   return direct ? direct.destination_amount : null
 }
 
+/** Direct XLM cost for receiving exactly `amount` USDC, with no intermediate assets. */
+export async function quoteStrictReceive(net, amount) {
+  const u = new URL('/paths/strict-receive', net.horizon)
+  u.searchParams.set('source_assets', 'native')
+  u.searchParams.set('destination_asset_type', 'credit_alphanum4')
+  u.searchParams.set('destination_asset_code', net.usdc.code)
+  u.searchParams.set('destination_asset_issuer', net.usdc.issuer)
+  u.searchParams.set('destination_amount', amount)
+  let res = await fetch(u)
+  if (res.status === 429) { await new Promise((r) => setTimeout(r, 2500)); res = await fetch(u) }
+  if (!res.ok) { const e = new Error(`horizon paths ${res.status}`); e.response = { status: res.status }; throw e }
+  const data = await res.json()
+  const direct = data._embedded.records.find((r) => r.path.length === 0)
+  return direct ? direct.source_amount : null
+}
+
 export function resultCodes(err) {
   const extras = err?.response?.data?.extras
   return {

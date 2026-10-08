@@ -110,6 +110,10 @@
     var cadenceError = !every() || periodS() < (MIN_PERIOD[W.network] || 3600) || periodS() > MAX_PERIOD;
     $('every-hint').textContent = pr && cadenceError ? pr : (periodS() ? T('dyn.cadence.hint', { cadence: label() }) : '');
     $('every-hint').classList.toggle('err', Boolean(pr && cadenceError));
+    var countError = n < 2 || n > 18;
+    $('count-hint').textContent = countError ? T('dyn.count.range') : '';
+    $('count-hint').classList.toggle('err', countError);
+    $('count').setAttribute('aria-invalid', String(countError));
     var ceilingExplain = $('ceiling-explain');
     if (ceilingExplain) ceilingExplain.textContent = T('app.ceiling.hint', { percent: state.ceiling });
     renderNetwork();
@@ -236,9 +240,13 @@
 
   async function loadAccount() {
     if (!W.address) { state.account = null; renderAccount(); return; }
+    var address = W.address, network = W.network;
+    var account;
     try {
-      state.account = await fetch(API + '/api/account?network=' + W.network + '&address=' + W.address).then(function (x) { return x.json(); });
-    } catch (e) { state.account = { error: true }; }
+      account = await fetch(API + '/api/account?network=' + network + '&address=' + address).then(function (x) { return x.json(); });
+    } catch (e) { account = { error: true }; }
+    if (address !== W.address || network !== W.network) return;
+    state.account = account;
     renderAccount();
   }
 
@@ -265,6 +273,12 @@
   async function helper(kind) {
     setNote(T('dyn.action.preparing'));
     try {
+      await loadAccount();
+      if (!state.account || state.account.error) throw new Error(T('dyn.account.unavailable'));
+      if (kind === 'test-usdc' && Number(state.account.usdc) >= amount()) {
+        setNote(T('dyn.account.enough'));
+        return;
+      }
       var r = await fetch(API + '/api/helper/' + kind + '?network=' + W.network + '&address=' + W.address).then(function (x) { return x.json(); });
       if (r.error) throw new Error(r.error);
       var s = await W.api.signTransaction(r.xdr, { networkPassphrase: r.networkPassphrase, address: W.address });
@@ -378,6 +392,8 @@
   $('sign').addEventListener('click', signPlan);
   document.addEventListener('damla:connected', function () { setNote(''); loadAccount(); renderMyPlans(); renderPreview(); });
   document.addEventListener('damla:network', function () { state.quote = null; pilotDefaults(); refresh(); loadAccount(); renderMyPlans(); });
+  window.addEventListener('focus', loadAccount);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) loadAccount(); });
   document.addEventListener('damla:language', function () {
     var mainnetButton = document.querySelector('#net-switch [data-net="mainnet"]');
     if (mainnetButton && mainnetButton.classList.contains('off')) mainnetButton.title = T('app.net.closed');
