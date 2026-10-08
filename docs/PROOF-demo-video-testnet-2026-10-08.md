@@ -23,3 +23,5 @@ This is the **same plan shown in the [demo video](https://drive.google.com/file/
 | #10 | Settled **after #9 expired**, ledger 5080499 | [76f6c9f6e3f42c6ffd60868b35521990e68cdce358db1614f4880a1fed33aa72](https://stellar.expert/explorer/testnet/tx/76f6c9f6e3f42c6ffd60868b35521990e68cdce358db1614f4880a1fed33aa72) |
 
 The [cleanup transaction](https://stellar.expert/explorer/testnet/tx/fa03462d1cb017c703da8accd2bb4d046ad172cfec0ca2f08ae614dd871c6c88) succeeded in ledger 5080500, merging the channel back to the treasury. The plan is `done`. The nine settled purchases and the missed window were independently checked against Stellar Testnet Horizon on 2026-10-08. The expired slot has a pre-signed hash but no transaction recorded on chain; the successful #10 proves that its failure did not block the chain.
+
+This #9 miss was **not** a deliberately induced skip: the service attempted submission once and received `tx_too_late`. The SOW's deliberately skipped purchase is separately proven by the [controlled four-slot testnet run](PROOF-skip-testnet.md), where #2 was intentionally withheld and #3/#4 settled afterward.
